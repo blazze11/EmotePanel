@@ -1,0 +1,2 @@
+# EmotePanel
+EmotePanel WoW Addon
