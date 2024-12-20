@@ -1,8 +1,8 @@
 ## Interface: 11500
 ## Title: Emote Panel
 ## Notes: A simple addon with quick emote buttons
-## Author: Your Name
-## Version: 1.0
+## Author: blazze11
+## Version: 0.0.1
 ## SavedVariables: EmotePanelSavedVars
 
 EmotePanel.lua
