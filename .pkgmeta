@@ -1,0 +1,9 @@
+package-as: EmotePanel
+
+enable-toc-creation: yes
+
+move-folders:
+  EmotePanel/EmotePanel: EmotePanel
+
+ignore:
+  - README.md
