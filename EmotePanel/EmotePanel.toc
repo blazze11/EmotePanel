@@ -1,7 +1,7 @@
 ## Interface: 11500
 ## Title: Emote Panel
 ## Notes: A simple addon with quick emote buttons
-## Author: blazze11
+## Author: Blazze
 ## Version: 0.0.1
 ## SavedVariables: EmotePanelSavedVars
 
