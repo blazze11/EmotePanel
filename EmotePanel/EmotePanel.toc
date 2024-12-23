@@ -1,4 +1,4 @@
-## Interface: 11500
+## Interface: 11505
 ## Title: Emote Panel
 ## Notes: A simple addon with quick emote buttons
 ## Author: Blazze
