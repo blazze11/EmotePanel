@@ -576,7 +576,7 @@ function EmotePanel:CreateButtons()
                         if EmotePanel.optionsPanel then
                             local helpPanel = _G[AddonName .. "HelpPanel"]
                             if helpPanel and helpPanel:IsShown() then
-                                RefreshListContent(helpPanel, helpPanel.scrollFrame)
+                                RefreshListContent(helpPanel)
                             end
                         end
                     end
@@ -596,7 +596,7 @@ function EmotePanel:CreateButtons()
                     if EmotePanel.optionsPanel then
                         local helpPanel = _G[AddonName .. "HelpPanel"]
                         if helpPanel and helpPanel:IsShown() then
-                            RefreshListContent(helpPanel, helpPanel.scrollFrame)
+                            RefreshListContent(helpPanel)
                         end
                     end
                 end)
