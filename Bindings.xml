@@ -1,5 +1,0 @@
-<Bindings>
-    <Binding name="Open Emote Panel" category="Emote Panel">
-        EmotePanel_Toggle()
-    </Binding>
-</Bindings>
