@@ -1,0 +1,8 @@
+## Interface: 11505
+## Title: EmotePanel
+## Notes: A simple addon with quick emote buttons
+## Author: Blazze
+## Version: 0.0.2
+## SavedVariables: EmotePanelSavedVars
+
+EmotePanel.lua
