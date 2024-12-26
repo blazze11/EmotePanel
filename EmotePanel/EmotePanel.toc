@@ -2,7 +2,7 @@
 ## Title: EmotePanel
 ## Notes: A simple addon with quick emote buttons
 ## Author: Blazze
-## Version: 0.0.2
+## Version: 0.0.3
 ## SavedVariables: EmotePanelSavedVars
 
 EmotePanel.lua
