@@ -75,7 +75,6 @@ local PANEL_MODES = {
         title = "Emotes 1",
         list = {
             { name = "Angry",    action = "angry",    actionType = "emote" },
-            { name = "Applause", action = "bravo",    actionType = "emote" },
             { name = "Blush",    action = "blush",    actionType = "emote" },
             { name = "Bow",      action = "bow",      actionType = "emote" },
             { name = "Cackle",   action = "cackle",   actionType = "emote" },
@@ -107,12 +106,11 @@ local PANEL_MODES = {
             { name = "Salute",   action = "salute",    actionType = "emote" },
             { name = "Sigh",     action = "sigh",      actionType = "emote" },
             { name = "Sorry",    action = "apologize", actionType = "emote" },
-            { name = "Stand",    action = "stand",     actionType = "emote" },
             { name = "Talk",     action = "talk",      actionType = "emote" },
             { name = "Thank",    action = "thank",     actionType = "emote" },
             { name = "Threaten", action = "threaten",  actionType = "emote" },
+
             { name = "Wave",     action = "wave",      actionType = "emote" },
-            { name = "Yes",      action = "nod",       actionType = "emote" },
             { name = "Yes",      action = "nod",       actionType = "emote" },
         }
     },
@@ -157,7 +155,7 @@ local PANEL_MODES = {
             { name = "Roll",            action = "roll",       actionType = "command" },
             { name = "Ready Check",     action = "readycheck", actionType = "command" },
             { name = "Who",             action = "who",        actionType = "command" },
-            { name = "Leave Group",     action = "leave",      actionType = "command" },
+            { name = "Duel",            action = "duel",       actionType = "command" },
             { name = "Reload UI",       action = "reload",     actionType = "command" },
         }
     }
@@ -932,6 +930,7 @@ local function OnEvent(self, event, ...)
         print("|cFF00FF00EmotePanel|r loaded. Type |cFFFFFF00/ep help|r for commands and instructions.")
     end
 end
+
 
 -- Create and setup event frame
 local eventFrame = CreateFrame("Frame")
