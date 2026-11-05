@@ -11,6 +11,7 @@ local PANEL_WIDTH, PANEL_HEIGHT = 432, 652
 local WHEEL_SIZE = 382
 local SECTOR_COUNT = 8
 local SECTOR_ANGLE = 2 * math.pi / SECTOR_COUNT
+local WHEEL_STICKS = { Movement = true, Left = true, Camera = true, Right = true }
 local WHEEL_ATLAS = "gamepad-radial-menu-wheelbg"
 local SELECTION_ATLAS = "gamepad-radial-menu-selected"
 local ICON_BORDER = "gamepad-actionbar-circleslot-border-normal"
@@ -1106,7 +1107,8 @@ local function GamepadGlyph(key, fallback)
 end
 
 function EmotePanel:RefreshGamepadHint()
-    self.navigationHint:SetText(GamepadGlyph("PADRSTICKAXIS", "Right stick") .. " "
+    self.navigationHint:SetText(GamepadGlyph("PADLSTICKAXIS", "Left stick") .. " / "
+        .. GamepadGlyph("PADRSTICKAXIS", "Right stick") .. " "
         .. GamepadGlyph("DIRPADVERTICAL", "Up/Down") .. " Select       "
         .. GamepadGlyph("DIRPADHORIZONTAL", "Left/Right") .. " Page")
     local mode, slot, data = GetSectorEntry(self.selected)
@@ -1224,7 +1226,11 @@ function EmotePanel:SetupGamepad()
         return false
     end)
     frame:SetScript("OnGamePadStick", function(_, stick, x, y)
-        if (stick ~= "Camera" and stick ~= "Right") or IsModifierKeyDown() or not self:CanUseWheel() then
+        if not WHEEL_STICKS[stick] or IsModifierKeyDown() or not self:CanUseWheel() then
+            return true
+        end
+        -- Let the movement stick's neutral event stop movement that started before the wheel opened.
+        if (stick == "Movement" or stick == "Left") and x == 0 and y == 0 then
             return true
         end
         if x * x + y * y >= 0.25 then
@@ -1395,7 +1401,7 @@ local function CreateInterfaceOptions()
     -- Description
     local description = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     description:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-    description:SetText("Open with /ep or bind Open or Close Emote Panel in Keybindings.\nAim the right stick to select a sector or use the D-pad.")
+    description:SetText("Open with /ep or bind Open or Close Emote Panel in Keybindings.\nAim either stick to select a sector or use the D-pad.")
 
     -- Create panels using our panel creation functions
     local customizationPanel = CreateCustomizationPanel(mainPanel)
@@ -1424,7 +1430,7 @@ local function ShowHelp()
     print("|cFF00FF00EmotePanel Commands:|r")
     print("  /ep - Toggle EmotePanel")
     print("  /ep help - Show this help message")
-    print("  Right stick or D-pad up/down: select. D-pad left/right: change page.")
+    print("  Either stick or D-pad up/down: select. D-pad left/right: change page.")
     print("  A/Cross: use. B/Circle: close. Y/Triangle or right-click: edit any sector.")
     print("  X/Square or middle-click: add or remove a favorite. The wheel opens on Favorites.")
     print("  /ep config - Open settings panel")
