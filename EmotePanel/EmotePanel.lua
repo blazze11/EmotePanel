@@ -19,6 +19,12 @@ local ICON_PATH = "Interface\\Icons\\"
 local PANEL_ATLAS = "gamepad-footer-slot-bg"
 local PANEL_BORDER_ATLAS = "gamepad-footer-slot-frameneutral"
 local FOCUS_ATLAS = "gamepad-footer-slot-framefocused"
+local SIT_INDEX = 30 -- Favorites store the original emote slot number.
+local SELECTION_COLORS = {
+    say = { 0.36, 0.84, 1 },
+    party = { 0.48, 1, 0.46 },
+    command = { 0.82, 0.54, 1 },
+}
 
 -- Default positions for the panels
 local DEFAULT_POSITIONS = {
@@ -105,6 +111,7 @@ local PANEL_MODES = {
             { name = "Threaten", action = "threaten",  actionType = "emote", icon = "Ability_Physical_Taunt_purple" },
             { name = "Wave",     action = "wave",      actionType = "emote", icon = "Spell_Holy_LayOnHands" },
             { name = "Yes",      action = "nod",       actionType = "emote", icon = "Interface\\RaidFrame\\ReadyCheck-Ready" },
+            { name = "Sit",      action = "sit",       actionType = "emote", icon = "INV_FISHINGCHAIR" },
         }
     },
     chat = {
@@ -211,6 +218,12 @@ local function LoadFavorites()
                 table.insert(favorites, { mode = entry.mode, index = entry.index })
             end
         end
+    end
+    if not EmotePanelSavedVars.sitFavoriteAdded then
+        if not FindFavorite("emotes", SIT_INDEX) then
+            table.insert(favorites, 1, { mode = "emotes", index = SIT_INDEX })
+        end
+        EmotePanelSavedVars.sitFavoriteAdded = true
     end
     EmotePanelSavedVars.favorites = favorites
 end
@@ -468,23 +481,38 @@ local function GetEntryName(mode, index, data)
     return GetCustomButtonName(mode, index) or data.name
 end
 
+local function SetSelectionTint(texture, color)
+    texture:SetDesaturated(color ~= nil)
+    if color then
+        texture:SetVertexColor(unpack(color))
+    else
+        texture:SetVertexColor(1, 1, 1)
+    end
+end
+
 function EmotePanel:Select(index)
     if currentPage.count == 0 then return end
     index = (index - 1) % currentPage.count + 1
     if index == self.selected then return end
 
     if self.selected then
-        self.slots[self.selected].border:SetAtlas(ICON_BORDER)
+        local previousBorder = self.slots[self.selected].border
+        previousBorder:SetAtlas(ICON_BORDER)
+        SetSelectionTint(previousBorder)
     end
     self.selected = index
     self.highlight:Show()
-    self.slots[index].border:SetAtlas(SELECTED_ICON_BORDER)
+    local border = self.slots[index].border
+    border:SetAtlas(SELECTED_ICON_BORDER)
     local angle = (index - 1) * SECTOR_ANGLE
     local radius = self.highlightRadius
     self.highlight:SetPoint("CENTER", self.wheel, "CENTER", math.sin(angle) * radius, math.cos(angle) * radius)
     -- Blizzard's highlight atlas points down before rotation.
     self.highlight:SetRotation(math.pi - angle)
     local mode, slot, data = GetSectorEntry(index)
+    local color = SELECTION_COLORS[data.actionType]
+    SetSelectionTint(self.highlight, color)
+    SetSelectionTint(border, color)
     self.selectionName:SetText(GetEntryName(mode, slot, data))
     self:RefreshGamepadHint()
 end
@@ -667,6 +695,7 @@ function EmotePanel:RefreshWheel(selection)
                 slot.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
             end
             slot.border:SetAtlas(ICON_BORDER)
+            SetSelectionTint(slot.border)
             slot.favorite:SetShown(currentPage.mode ~= "favorites" and FindFavorite(mode, entryIndex) ~= nil)
         end
         slot:SetShown(used)
@@ -735,7 +764,7 @@ function EmotePanel:CreateControls()
     footer:SetPoint("BOTTOM", 0, 7)
 
     self.selectionName = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    self.selectionName:SetPoint("TOP", 0, -442)
+    self.selectionName:SetPoint("TOP", 0, -421)
     self.selectionName:SetWidth(386)
     self.selectionName:SetWordWrap(false)
     self.selectionName:SetTextColor(1, 0.96, 0.87)
