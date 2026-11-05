@@ -11,8 +11,12 @@ _G[AddonName] = EmotePanel
 local BUTTON_HEIGHT = 26
 local ROW_HEIGHT = 30
 local BUTTON_WIDTH = 162
+local VISIBLE_ROWS = 6
+local LIST_SIDE_INSET = 30
+local LIST_TOP_INSET = 38
+local LIST_BOTTOM_INSET = 49
 local PANEL_WIDTH = 236
-local PANEL_HEIGHT = 240
+local PANEL_HEIGHT = LIST_TOP_INSET + VISIBLE_ROWS * ROW_HEIGHT + LIST_BOTTOM_INSET
 
 -- Default positions for the panels
 local DEFAULT_POSITIONS = {
@@ -402,8 +406,8 @@ end
 function EmotePanel:CreateScrollFrame()
     local scrollFrame = CreateFrame("ScrollFrame", AddonName .. "ScrollFrame", self.frame,
         "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", 24, -38)
-    scrollFrame:SetPoint("BOTTOMRIGHT", -30, 42)
+    scrollFrame:SetPoint("TOPLEFT", LIST_SIDE_INSET, -LIST_TOP_INSET)
+    scrollFrame:SetPoint("BOTTOMRIGHT", -LIST_SIDE_INSET, LIST_BOTTOM_INSET)
     scrollFrame.ScrollBar.scrollStep = ROW_HEIGHT
     scrollFrame:HookScript("OnScrollRangeChanged", function(frame)
         if not EmotePanelSavedVars.scrollBarStyle then
@@ -412,7 +416,7 @@ function EmotePanel:CreateScrollFrame()
     end)
 
     local content = CreateFrame("Frame", nil, scrollFrame)
-    content:SetWidth(PANEL_WIDTH - 54)
+    content:SetWidth(PANEL_WIDTH - 2 * LIST_SIDE_INSET)
     scrollFrame:SetScrollChild(content)
     self.scrollFrame = scrollFrame
     self.scrollContent = content
@@ -435,7 +439,7 @@ function EmotePanel:Select(index)
     local top = (self.selected - 1) * ROW_HEIGHT
     local scrollFrame = self.scrollFrame
     local offset = scrollFrame:GetVerticalScroll()
-    local bottomOffset = top + BUTTON_HEIGHT - scrollFrame:GetHeight()
+    local bottomOffset = top + ROW_HEIGHT - scrollFrame:GetHeight()
     if top < offset then
         scrollFrame:SetVerticalScroll(top)
     elseif bottomOffset > offset then
@@ -479,7 +483,7 @@ end
 function EmotePanel:CreateButtons(selection)
     local mode = currentMode
     local list = PANEL_MODES[mode].list
-    self.scrollContent:SetHeight((#list - 1) * ROW_HEIGHT + BUTTON_HEIGHT)
+    self.scrollContent:SetHeight(#list * ROW_HEIGHT)
     self.buttons = self.buttons or {}
 
     for index, data in ipairs(list) do
@@ -550,10 +554,6 @@ function EmotePanel:CreateControls()
         self:CycleMode(1)
     end)
 
-    local hint = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    hint:SetPoint("BOTTOM", 0, 12)
-    hint:SetText("D-pad: Select / Page    A / Cross: Use\nB / Circle: Close")
-
     local help = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
     help:SetSize(21, 21)
     help:SetPoint("BOTTOMRIGHT", -9, 10)
@@ -562,6 +562,12 @@ function EmotePanel:CreateControls()
         frame:Hide()
         Settings.OpenToCategory(self.settingsCategoryID)
     end)
+
+    local hint = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    hint:SetPoint("BOTTOMLEFT", 12, 12)
+    hint:SetPoint("BOTTOMRIGHT", help, "BOTTOMLEFT", -8, 2)
+    hint:SetJustifyH("CENTER")
+    hint:SetText("D-pad: Select / Page\nA / Cross: Use   B / Circle: Close")
 end
 
 function EmotePanel:CycleMode(direction)
