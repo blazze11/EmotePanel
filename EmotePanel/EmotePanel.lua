@@ -1156,9 +1156,18 @@ function EmotePanel:ToggleFavorite()
     self:ShowPage(page, self.selected)
 end
 
+function EmotePanel:CloseForGameMenu()
+    if not self.frame:IsShown() then return false end
+    StaticPopup_Hide("EMOTEPANEL_RESET_BUTTON")
+    StaticPopup_Hide("EMOTEPANEL_RESET_ALL")
+    self.frame:Hide()
+    return true
+end
+
 function EmotePanel:SetupGamepad()
     local frame = self.frame
     local pressed = {}
+    local function CloseForGameMenu() self:CloseForGameMenu() end
     local actions = {
         PADDUP = function() if self.selected then self:Select(self.selected - 1) end end,
         PADDDOWN = function() if self.selected then self:Select(self.selected + 1) end end,
@@ -1186,6 +1195,9 @@ function EmotePanel:SetupGamepad()
         PAD4 = function() self.customMessageDialog.picker:ToggleLibrary() end,
     }
     local function GetAction(key)
+        if key == "PADFORWARD" or GetBindingFromClick(key) == "TOGGLEGAMEMENU" then
+            return CloseForGameMenu
+        end
         if StaticPopup_Visible("EMOTEPANEL_RESET_BUTTON") or StaticPopup_Visible("EMOTEPANEL_RESET_ALL") then return end
         local dialog = self.customMessageDialog
         if dialog and dialog:IsShown() then
@@ -1196,9 +1208,8 @@ function EmotePanel:SetupGamepad()
         if key ~= "PAD4" or self.selected then return actions[key] end
     end
     frame:SetScript("OnGamePadButtonDown", function(_, key)
-        if IsModifierKeyDown() then return true end
         local action = GetAction(key)
-        if not action then return true end
+        if not action or (action ~= CloseForGameMenu and IsModifierKeyDown()) then return true end
         pressed[key] = action
         return false
     end)
@@ -1225,9 +1236,6 @@ function EmotePanel:SetupGamepad()
     end)
     frame:HookScript("OnHide", function()
         wipe(pressed)
-        if self.customMessageDialog then
-            self.customMessageDialog:Hide()
-        end
     end)
     frame:EnableGamePadButton(true)
     frame:EnableGamePadStick(true)
@@ -1274,11 +1282,18 @@ function EmotePanel:Initialize()
     self:CreateControls()
     self:RefreshWheel()
     self:LoadPosition()
+    self.frame:HookScript("OnHide", function()
+        if self.customMessageDialog then self.customMessageDialog:Hide() end
+    end)
 
     -- Hide by default
     self.frame:Hide()
 
-    -- Make ESC key close the frame
+    if RegisterGameMenuEscHandler and GameMenuEscPriority then
+        RegisterGameMenuEscHandler(GameMenuEscPriority.AddOn, function()
+            return self:CloseForGameMenu()
+        end)
+    end
     table.insert(UISpecialFrames, self.frame:GetName())
 end
 
