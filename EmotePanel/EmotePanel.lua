@@ -239,12 +239,65 @@ local function GetSectorEntry(sector)
     return mode, index, PANEL_MODES[mode].list[index]
 end
 
+local targetCommands = {
+    ["/inspect"] = "target",
+    ["/trade"] = "target",
+    ["/invite"] = "name",
+    ["/follow"] = "name",
+    ["/friend"] = "name",
+    ["/addfriend"] = "name",
+    ["/tm"] = "marker",
+    ["/targetmarker"] = "marker",
+}
+for key, kind in pairs({
+    INSPECT = "target", TRADE = "target", INVITE = "name",
+    REQUEST_INVITE = "name", FOLLOW = "name", FRIENDS = "name", TARGET_MARKER = "marker",
+}) do
+    local index = 1
+    while _G["SLASH_" .. key .. index] do
+        targetCommands[_G["SLASH_" .. key .. index]:lower()] = kind
+        index = index + 1
+    end
+end
+
+local function HasLockedTarget()
+    return UnitExists("target") and not IsTargetLoose()
+end
+
+local function NeedsLockedTarget(verb, arguments)
+    local kind = targetCommands[verb]
+    if kind == "target" then return true end
+    if kind == "name" then return arguments == "" end
+    if kind == "marker" then
+        if not arguments:find("[", 1, true) then return true end
+        local _, unit = SecureCmdOptionParse(arguments)
+        return issecretvalue(unit) or not unit or unit == "target"
+    end
+    return false
+end
+
 local function ExecuteAction(mode, index, data)
     if data.actionType == "emote" then
         local alias = "/" .. data.action:upper()
         local token = hash_EmoteTokenList and hash_EmoteTokenList[alias] or data.action:upper()
-        C_ChatInfo.PerformEmote(token)
+        local targetName = not HasLockedTarget() and "none" or nil
+        C_ChatInfo.PerformEmote(token, targetName)
     elseif data.actionType == "command" then
+        local command = GetCustomMessage(mode, index) or data.action
+        command = "/" .. command:gsub("^/+", "")
+        if not HasLockedTarget() then
+            local verb, arguments = command:match("^(%S+)%s*(.-)%s*$")
+            if verb and NeedsLockedTarget(verb:lower(), arguments) then
+                print("EmotePanel: Select a target first.")
+                return
+            end
+            local emote = arguments == "" and hash_EmoteTokenList and hash_EmoteTokenList[verb:upper()]
+            if emote then
+                EmotePanel.frame:Hide()
+                C_ChatInfo.PerformEmote(emote, "none")
+                return
+            end
+        end
         local activeBox = ChatFrameUtil.GetActiveWindow()
         local editBox = ChatFrameUtil.ChooseBoxForSend()
         if not editBox then return end
@@ -253,9 +306,8 @@ local function ExecuteAction(mode, index, data)
             print("EmotePanel: Finish your current chat draft before using a command.")
             return
         end
-        local command = GetCustomMessage(mode, index) or data.action
         EmotePanel.frame:Hide()
-        editBox:SetText("/" .. command:gsub("^/+", ""))
+        editBox:SetText(command)
         editBox:SendMessage()
     else
         local message = GetCustomMessage(mode, index) or data.action
