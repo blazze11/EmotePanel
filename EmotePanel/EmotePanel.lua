@@ -7,17 +7,11 @@ _G["BINDING_NAME_Open Emote Panel"] = "Open or Close Emote Panel"
 -- Initialize the addon namespace
 _G[AddonName] = EmotePanel
 
--- Constants
-local BUTTON_HEIGHT = 26
-local ROW_HEIGHT = 30
-local BUTTON_WIDTH = 162
-local VISIBLE_ROWS = 6
-local HEADER_CENTER_Y = -16
-local LIST_SIDE_INSET = 30
-local LIST_TOP_INSET = 38
-local LIST_BOTTOM_INSET = 54
-local PANEL_WIDTH = 236
-local PANEL_HEIGHT = LIST_TOP_INSET + VISIBLE_ROWS * ROW_HEIGHT + LIST_BOTTOM_INSET
+local PANEL_WIDTH, PANEL_HEIGHT = 432, 524
+local WHEEL_SIZE = 382
+local LABEL_RADIUS = 136
+local FULL_TURN = 2 * math.pi
+local MEDIA = "Interface\\AddOns\\EmotePanel\\Media\\"
 
 -- Default positions for the panels
 local DEFAULT_POSITIONS = {
@@ -27,10 +21,6 @@ local DEFAULT_POSITIONS = {
         x = 0,
         y = 0
     },
-}
-
-local DEFAULT_SETTINGS = {
-    scrollBarStyle = false
 }
 
 local function GetCustomMessage(mode, index)
@@ -230,7 +220,7 @@ StaticPopupDialogs["EMOTEPANEL_RESET_BUTTON"] = {
                 EmotePanelSavedVars.customButtonNames[data.mode][data.index] = nil
             end
 
-            EmotePanel:CreateButtons()
+            EmotePanel:RefreshWheel()
 
             if data.dialog then
                 data.dialog:Hide()
@@ -260,7 +250,7 @@ StaticPopupDialogs["EMOTEPANEL_RESET_ALL"] = {
         EmotePanelSavedVars.customButtonNames = {}
 
         if EmotePanel.frame then
-            EmotePanel:CreateButtons()
+            EmotePanel:RefreshWheel()
         end
 
         local helpPanel = _G[AddonName .. "HelpPanel"]
@@ -277,11 +267,11 @@ StaticPopupDialogs["EMOTEPANEL_RESET_ALL"] = {
 }
 local function SetUpDialogHeader(frame)
     frame.Title:ClearAllPoints()
-    frame.Title:SetPoint("CENTER", frame, "TOP", 0, HEADER_CENTER_Y)
+    frame.Title:SetPoint("CENTER", frame, "TOP", 0, -16)
 
     local closeButton = _G[frame:GetName() .. "Close"]
     closeButton:ClearAllPoints()
-    closeButton:SetPoint("RIGHT", frame, "TOPRIGHT", -6, HEADER_CENTER_Y)
+    closeButton:SetPoint("RIGHT", frame, "TOPRIGHT", -6, -16)
 end
 
 local function CreateCustomMessageDialog()
@@ -370,7 +360,7 @@ local function CreateCustomMessageDialog()
 end
 -- EmotePanel Methods
 function EmotePanel:CreateMainFrame()
-    self.frame = CreateFrame("Frame", AddonName .. "Frame", UIParent, "UIPanelDialogTemplate")
+    self.frame = CreateFrame("Frame", AddonName .. "Frame", UIParent, "BackdropTemplate")
     local frame = self.frame
 
     frame:SetWidth(PANEL_WIDTH)
@@ -381,9 +371,15 @@ function EmotePanel:CreateMainFrame()
     frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
 
-    SetUpDialogHeader(frame)
+    frame:SetBackdrop({
+        bgFile = "Interface\\Buttons\\WHITE8X8",
+        edgeFile = "Interface\\Buttons\\WHITE8X8",
+        edgeSize = 1,
+    })
+    frame:SetBackdropColor(0.035, 0.063, 0.088, 0.97)
+    frame:SetBackdropBorderColor(0.23, 0.34, 0.40, 1)
 
-    -- Make frame draggable
+    -- Drag the panel by its header or margins.
     frame:RegisterForDrag("LeftButton")
     frame:SetScript("OnDragStart", frame.StartMoving)
     frame:SetScript("OnDragStop", function()
@@ -394,48 +390,32 @@ function EmotePanel:CreateMainFrame()
     return frame
 end
 
-function EmotePanel:CreateScrollFrame()
-    local scrollFrame = CreateFrame("ScrollFrame", AddonName .. "ScrollFrame", self.frame,
-        "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", LIST_SIDE_INSET, -LIST_TOP_INSET)
-    scrollFrame:SetPoint("BOTTOMRIGHT", -LIST_SIDE_INSET, LIST_BOTTOM_INSET)
-    scrollFrame.ScrollBar.scrollStep = ROW_HEIGHT
-    scrollFrame:HookScript("OnScrollRangeChanged", function(frame)
-        if not EmotePanelSavedVars.scrollBarStyle then
-            frame.ScrollBar:Hide()
-        end
-    end)
-
-    local content = CreateFrame("Frame", nil, scrollFrame)
-    content:SetWidth(PANEL_WIDTH - 2 * LIST_SIDE_INSET)
-    scrollFrame:SetScrollChild(content)
-    self.scrollFrame = scrollFrame
-    self.scrollContent = content
-    self:SetScrollBarStyle(EmotePanelSavedVars.scrollBarStyle)
+-- Sectors start at twelve o'clock and advance clockwise.
+local function SectorAt(x, y, count)
+    local step = FULL_TURN / count
+    return math.floor(math.atan2(x, y) / step + 0.5) % count + 1
 end
 
-function EmotePanel:SetScrollBarStyle(enabled)
-    EmotePanelSavedVars.scrollBarStyle = enabled
-    self.scrollFrame.ScrollBar:SetShown(enabled)
+local function GetEntryName(mode, index, data)
+    if data.actionType == "emote" then
+        return data.name
+    end
+    return GetCustomButtonName(mode, index) or data.name
 end
 
 function EmotePanel:Select(index)
-    local count = #PANEL_MODES[currentMode].list
-    if self.selected then
-        self.buttons[self.selected]:UnlockHighlight()
-    end
-    self.selected = math.max(1, math.min(index, count))
-    self.buttons[self.selected]:LockHighlight()
+    local list = PANEL_MODES[currentMode].list
+    index = (index - 1) % #list + 1
+    if index == self.selected then return end
 
-    local top = (self.selected - 1) * ROW_HEIGHT
-    local scrollFrame = self.scrollFrame
-    local offset = scrollFrame:GetVerticalScroll()
-    local bottomOffset = top + ROW_HEIGHT - scrollFrame:GetHeight()
-    if top < offset then
-        scrollFrame:SetVerticalScroll(top)
-    elseif bottomOffset > offset then
-        scrollFrame:SetVerticalScroll(math.min(bottomOffset, scrollFrame:GetVerticalScrollRange()))
+    if self.selected then
+        self.labels[self.selected]:SetTextColor(0.86, 0.91, 0.94)
     end
+    self.selected = index
+    self.labels[index]:SetTextColor(1, 1, 1)
+    self.highlight:SetRotation(-(index - 1) * FULL_TURN / #list)
+    self.selectionName:SetText(GetEntryName(currentMode, index, list[index]))
+    self.selectionIndex:SetFormattedText("%02d / %02d", index, #list)
 end
 
 function EmotePanel:EditButton(mode, index, data)
@@ -452,7 +432,7 @@ function EmotePanel:EditButton(mode, index, data)
         if name ~= "" and message ~= "" then
             SaveCustomButtonName(mode, index, name)
             SaveCustomMessage(mode, index, message)
-            self:CreateButtons()
+            self:RefreshWheel()
 
             local helpPanel = _G[AddonName .. "HelpPanel"]
             if helpPanel and helpPanel:IsVisible() then
@@ -471,97 +451,203 @@ function EmotePanel:EditButton(mode, index, data)
     dialog:Show()
 end
 
-function EmotePanel:CreateButtons(selection)
-    local mode = currentMode
-    local list = PANEL_MODES[mode].list
-    self.scrollContent:SetHeight(#list * ROW_HEIGHT)
-    self.buttons = self.buttons or {}
-
-    for index, data in ipairs(list) do
-        local button = self.buttons[index]
-        if not button then
-            button = CreateFrame("Button", nil, self.scrollContent, "UIPanelButtonTemplate")
-            button:SetSize(BUTTON_WIDTH, BUTTON_HEIGHT)
-            button:SetPoint("TOP", 0, -(index - 1) * ROW_HEIGHT)
-            button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-            button:SetScript("OnLeave", function()
-                GameTooltip:Hide()
-            end)
-            self.buttons[index] = button
+function EmotePanel:ActivateSector(index, mouseButton)
+    local list = PANEL_MODES[currentMode].list
+    local data = list[index]
+    self:Select(index)
+    if mouseButton == "RightButton" then
+        if data.actionType ~= "emote" then
+            self:EditButton(currentMode, index, data)
         end
+    elseif mouseButton == "LeftButton" then
+        ExecuteAction(currentMode, index, data)
+    end
+end
 
-        local customizable = data.actionType ~= "emote"
-        button.customizable = customizable
-        local customName = customizable and GetCustomButtonName(mode, index)
-        local customMessage = customizable and GetCustomMessage(mode, index)
-        button:SetText((customName or data.name) .. (customMessage and "*" or ""))
-        button:SetScript("OnEnter", function(row)
-            GameTooltip:SetOwner(row, "ANCHOR_RIGHT")
-            GameTooltip:SetText(row:GetText())
-            GameTooltip:AddLine(customMessage or data.action, 1, 1, 1, true)
-            if data.actionType == "command" then
-                GameTooltip:AddLine("Opens in chat for confirmation", 0.7, 0.7, 0.7)
-            end
-            if customizable then
-                GameTooltip:AddLine("Right-click to edit", 0.7, 0.7, 0.7)
-            end
-            GameTooltip:Show()
-        end)
-        button:SetScript("OnClick", function(_, mouseButton)
-            if mouseButton == "LeftButton" then
-                self:Select(index)
-                ExecuteAction(mode, index, data)
-            elseif mouseButton == "RightButton" and customizable then
-                self:EditButton(mode, index, data)
-            end
-        end)
-        button:Show()
+function EmotePanel:CanUseWheel()
+    return not ((self.customMessageDialog and self.customMessageDialog:IsShown())
+        or StaticPopup_Visible("EMOTEPANEL_RESET_BUTTON") or StaticPopup_Visible("EMOTEPANEL_RESET_ALL"))
+end
+
+function EmotePanel:CreateWheel()
+    local wheel = CreateFrame("Frame", nil, self.frame)
+    wheel:SetSize(WHEEL_SIZE, WHEEL_SIZE)
+    wheel:SetPoint("TOP", 0, -54)
+    wheel:EnableMouse(true)
+    self.wheel = wheel
+
+    self.wheelArt = wheel:CreateTexture(nil, "BACKGROUND")
+    self.wheelArt:SetAllPoints()
+    self.highlight = wheel:CreateTexture(nil, "ARTWORK")
+    self.highlight:SetAllPoints()
+
+    self.labels = {}
+    local maxEntries = 0
+    for _, mode in ipairs(modeOrder) do
+        maxEntries = math.max(maxEntries, #PANEL_MODES[mode].list)
+    end
+    for index = 1, maxEntries do
+        local label = wheel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        label:SetWidth(99)
+        label:SetJustifyH("CENTER")
+        label:SetWordWrap(false)
+        self.labels[index] = label
     end
 
-    for index = #list + 1, #self.buttons do
-        self.buttons[index]:Hide()
+    local selectionCaption = wheel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    selectionCaption:SetPoint("CENTER", 0, 35)
+    selectionCaption:SetTextColor(0.48, 0.79, 0.79)
+    selectionCaption:SetText("SELECTED")
+
+    self.selectionName = wheel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    self.selectionName:SetPoint("CENTER")
+    self.selectionName:SetWidth(126)
+    self.selectionName:SetMaxLines(2)
+    self.selectionName:SetTextColor(0.96, 0.99, 1)
+
+    self.selectionIndex = wheel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    self.selectionIndex:SetPoint("CENTER", 0, -35)
+    self.selectionIndex:SetTextColor(0.64, 0.76, 0.83)
+
+    local function SectorUnderCursor(cursorX, cursorY)
+        local centerX, centerY = wheel:GetCenter()
+        local scale = wheel:GetEffectiveScale()
+        local x, y = cursorX / scale - centerX, cursorY / scale - centerY
+        local distanceSquared = x * x + y * y
+        if distanceSquared >= 77 * 77 and distanceSquared <= 185 * 185 then
+            return SectorAt(x, y, #PANEL_MODES[currentMode].list)
+        end
     end
-    self:Select(selection or self.selected or 1)
+
+    local lastX, lastY, mouseDownButton, mouseDownSector
+    local function UpdateMouseSelection()
+        local x, y = GetCursorPosition()
+        if x == lastX and y == lastY then return end
+        lastX, lastY = x, y
+        if not self:CanUseWheel() then return end
+
+        local index = SectorUnderCursor(x, y)
+        if not index then
+            if GameTooltip:IsOwned(wheel) then GameTooltip:Hide() end
+            return
+        end
+        if index == self.selected and GameTooltip:IsShown() and GameTooltip:IsOwned(wheel) then return end
+        self:Select(index)
+        local data = PANEL_MODES[currentMode].list[index]
+        GameTooltip:SetOwner(wheel, "ANCHOR_CURSOR_RIGHT")
+        GameTooltip:SetText(GetEntryName(currentMode, index, data))
+        local action = GetCustomMessage(currentMode, index) or data.action
+        GameTooltip:AddLine(action, 1, 1, 1, true)
+        if data.actionType ~= "emote" then
+            GameTooltip:AddLine("Right-click to edit", 0.7, 0.7, 0.7)
+        end
+        GameTooltip:Show()
+    end
+    local function StopMouseSelection()
+        wheel:SetScript("OnUpdate", nil)
+        lastX, lastY = nil, nil
+        mouseDownButton, mouseDownSector = nil, nil
+        if GameTooltip:IsOwned(wheel) then GameTooltip:Hide() end
+    end
+    wheel:SetScript("OnEnter", function()
+        wheel:SetScript("OnUpdate", UpdateMouseSelection)
+        UpdateMouseSelection()
+    end)
+    wheel:SetScript("OnLeave", StopMouseSelection)
+    wheel:SetScript("OnHide", StopMouseSelection)
+    wheel:SetScript("OnMouseDown", function(_, mouseButton)
+        if (mouseButton == "LeftButton" or mouseButton == "RightButton") and self:CanUseWheel() then
+            mouseDownButton = mouseButton
+            mouseDownSector = SectorUnderCursor(GetCursorPosition())
+        end
+    end)
+    wheel:SetScript("OnMouseUp", function(_, mouseButton)
+        if mouseButton ~= mouseDownButton then return end
+        local pressedSector = mouseDownSector
+        mouseDownButton, mouseDownSector = nil, nil
+        if not pressedSector or not self:CanUseWheel() then return end
+        local index = SectorUnderCursor(GetCursorPosition())
+        if index == pressedSector then
+            if GameTooltip:IsOwned(wheel) then GameTooltip:Hide() end
+            self:ActivateSector(index, mouseButton)
+        end
+    end)
+end
+
+function EmotePanel:RefreshWheel(selection)
+    local list = PANEL_MODES[currentMode].list
+    local count = #list
+    self.wheelArt:SetTexture(MEDIA .. "Wheel" .. count .. ".tga")
+    self.highlight:SetTexture(MEDIA .. "Selection" .. count .. ".tga")
+    for index, label in ipairs(self.labels) do
+        local data = list[index]
+        if data then
+            local angle = (index - 1) * FULL_TURN / count
+            label:ClearAllPoints()
+            label:SetPoint("CENTER", self.wheel, "CENTER", math.sin(angle) * LABEL_RADIUS, math.cos(angle) * LABEL_RADIUS)
+            local name = GetEntryName(currentMode, index, data)
+            local customMessage = data.actionType ~= "emote" and GetCustomMessage(currentMode, index)
+            label:SetText(name .. (customMessage and "*" or ""))
+            label:SetTextColor(0.86, 0.91, 0.94)
+        end
+        label:SetShown(data ~= nil)
+    end
+    local nextSelection = selection or self.selected or 1
+    self.selected = nil
+    self:Select(nextSelection)
+end
+
+local function CreateTextButton(parent, text)
+    local button = CreateFrame("Button", nil, parent)
+    button:SetSize(32, 28)
+    local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    label:SetPoint("CENTER")
+    button:SetFontString(label)
+    button:SetNormalFontObject(GameFontHighlightLarge)
+    button:SetHighlightFontObject(GameFontNormalLarge)
+    button:SetText(text)
+    return button
 end
 
 function EmotePanel:CreateControls()
     local frame = self.frame
-    self.titleText = frame.Title
+    local caption = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    caption:SetPoint("TOP", 0, -10)
+    caption:SetTextColor(0.48, 0.79, 0.79)
+    caption:SetText("EMOTE WHEEL")
+
+    self.titleText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    self.titleText:SetPoint("TOP", 0, -26)
+    self.titleText:SetTextColor(0.96, 0.99, 1)
     self.titleText:SetText(PANEL_MODES[currentMode].title)
 
-    local previous = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    previous:SetSize(24, 18)
-    previous:SetPoint("CENTER", frame, "TOP", -66, HEADER_CENTER_Y)
-    previous:SetText("<")
-    previous:SetScript("OnClick", function()
-        self:CycleMode(-1)
-    end)
+    for direction = -1, 1, 2 do
+        local arrow = CreateTextButton(frame, direction < 0 and "<" or ">")
+        arrow:SetPoint("TOP", direction * 92, -19)
+        arrow:SetScript("OnClick", function() self:CycleMode(direction) end)
+    end
 
-    local nextPage = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    nextPage:SetSize(24, 18)
-    nextPage:SetPoint("CENTER", frame, "TOP", 66, HEADER_CENTER_Y)
-    nextPage:SetText(">")
-    nextPage:SetScript("OnClick", function()
-        self:CycleMode(1)
-    end)
+    local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", -10, -10)
 
-    local help = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    help:SetSize(21, 21)
-    help:SetPoint("BOTTOMRIGHT", -9, 10)
-    help:SetText("?")
+    local help = CreateTextButton(frame, "?")
+    help:SetPoint("TOPLEFT", 8, -8)
     help:SetScript("OnClick", function()
         frame:Hide()
         Settings.OpenToCategory(self.settingsCategoryID)
     end)
 
-    local hint = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    hint:SetPoint("BOTTOMLEFT", 12, 12)
-    hint:SetPoint("BOTTOMRIGHT", help, "BOTTOMLEFT", -8, 2)
-    hint:SetJustifyH("CENTER")
-    self.gamepadHint = hint
-    frame:HookScript("OnShow", function()
-        self:RefreshGamepadHint()
-    end)
+    local divider = frame:CreateTexture(nil, "ARTWORK")
+    divider:SetPoint("TOPLEFT", 22, -442)
+    divider:SetPoint("TOPRIGHT", -22, -442)
+    divider:SetHeight(1)
+    divider:SetColorTexture(0.23, 0.34, 0.40, 1)
+
+    self.navigationHint = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.navigationHint:SetPoint("TOP", 0, -446)
+    self.gamepadHint = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.gamepadHint:SetPoint("TOP", 0, -483)
+    frame:HookScript("OnShow", function() self:RefreshGamepadHint() end)
     if InputDeviceIconSetManager then
         InputDeviceIconSetManager:RegisterActiveInputDeviceIconSetUpdatedCallback(self.RefreshGamepadHint, self)
     end
@@ -572,20 +658,21 @@ local function GamepadGlyph(key, fallback)
     if icons and icons.GetActiveInputIconButtonTextures(key) then
         local atlas = icons.GetNormalActiveInputIconButtonTexture(key)
         if type(atlas) == "string" then
-            return CreateAtlasMarkup(atlas, 16, 16)
+            return CreateAtlasMarkup(atlas, 32, 32)
         end
     end
     return fallback
 end
 
 function EmotePanel:RefreshGamepadHint()
-    local direction = GamepadGlyph("DIRPADVERTICAL", "Up/Down") .. " Select    "
-        .. GamepadGlyph("DIRPADHORIZONTAL", "Left/Right") .. " Page"
-    local actions = GamepadGlyph("PAD1", "A") .. " Use    "
-    if self.buttons and self.buttons[self.selected].customizable then
-        actions = actions .. GamepadGlyph("PAD4", "Y") .. " Edit    "
+    self.navigationHint:SetText(GamepadGlyph("PADRSTICKAXIS", "Right stick") .. " "
+        .. GamepadGlyph("DIRPADVERTICAL", "Up/Down") .. " Select       "
+        .. GamepadGlyph("DIRPADHORIZONTAL", "Left/Right") .. " Page")
+    local actions = GamepadGlyph("PAD1", "A") .. " Use       "
+    if PANEL_MODES[currentMode].list[1].actionType ~= "emote" then
+        actions = actions .. GamepadGlyph("PAD4", "Y") .. " Edit       "
     end
-    self.gamepadHint:SetText(direction .. "\n" .. actions .. GamepadGlyph("PAD2", "B") .. " Close")
+    self.gamepadHint:SetText(actions .. GamepadGlyph("PAD2", "B") .. " Close")
 end
 
 function EmotePanel:CycleMode(direction)
@@ -593,20 +680,8 @@ function EmotePanel:CycleMode(direction)
     currentMode = modeOrder[currentModeIndex]
     self.titleText:SetText(PANEL_MODES[currentMode].title)
     GameTooltip:Hide()
-    self.scrollFrame:SetVerticalScroll(0)
-    self:CreateButtons(1)
+    self:RefreshWheel(1)
     self:RefreshGamepadHint()
-end
-
-function EmotePanel:ClickSelected(mouseButton)
-    local scrollFrame = self.scrollFrame
-    local top = (self.selected - 1) * ROW_HEIGHT
-    local offset = scrollFrame:GetVerticalScroll()
-    if top < offset or top + BUTTON_HEIGHT > offset + scrollFrame:GetHeight() then
-        self:Select(self.selected)
-        return
-    end
-    self.buttons[self.selected]:Click(mouseButton)
 end
 
 function EmotePanel:SetupGamepad()
@@ -617,14 +692,13 @@ function EmotePanel:SetupGamepad()
         PADDDOWN = function() self:Select(self.selected + 1) end,
         PADDLEFT = function() self:CycleMode(-1) end,
         PADDRIGHT = function() self:CycleMode(1) end,
-        PAD1 = function() self:ClickSelected("LeftButton") end,
+        PAD1 = function() self:ActivateSector(self.selected, "LeftButton") end,
         PAD2 = function() frame:Hide() end,
-        PAD4 = function() self:ClickSelected("RightButton") end,
+        PAD4 = function() self:ActivateSector(self.selected, "RightButton") end,
     }
     local function CanUsePanelControls(key)
-        return (key ~= "PAD4" or self.buttons[self.selected].customizable)
-            and not ((self.customMessageDialog and self.customMessageDialog:IsShown())
-            or StaticPopup_Visible("EMOTEPANEL_RESET_BUTTON") or StaticPopup_Visible("EMOTEPANEL_RESET_ALL"))
+        local data = PANEL_MODES[currentMode].list[self.selected]
+        return (key ~= "PAD4" or data.actionType ~= "emote") and self:CanUseWheel()
     end
     frame:SetScript("OnGamePadButtonDown", function(_, key)
         if not actions[key] or IsModifierKeyDown() or not CanUsePanelControls(key) then
@@ -634,22 +708,32 @@ function EmotePanel:SetupGamepad()
         return false
     end)
     frame:SetScript("OnGamePadButtonUp", function(_, key)
-        if not pressed[key] then
-            return true
-        end
+        if not pressed[key] then return true end
         pressed[key] = nil
         if CanUsePanelControls(key) then
+            if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
             actions[key]()
         end
         return false
     end)
-    frame:SetScript("OnHide", function()
+    frame:SetScript("OnGamePadStick", function(_, stick, x, y)
+        if (stick ~= "Camera" and stick ~= "Right") or IsModifierKeyDown() or not self:CanUseWheel() then
+            return true
+        end
+        if x * x + y * y >= 0.25 then
+            if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
+            self:Select(SectorAt(x, y, #PANEL_MODES[currentMode].list))
+        end
+        return false
+    end)
+    frame:HookScript("OnHide", function()
         wipe(pressed)
         if self.customMessageDialog then
             self.customMessageDialog:Hide()
         end
     end)
     frame:EnableGamePadButton(true)
+    frame:EnableGamePadStick(true)
 end
 
 function EmotePanel:SavePosition()
@@ -681,18 +765,13 @@ function EmotePanel:LoadPosition()
     )
 end
 
--- Modify the Initialize function to set default scroll style
 function EmotePanel:Initialize()
-    -- Initialize saved variables
-    if not EmotePanelSavedVars then EmotePanelSavedVars = {} end
-    if EmotePanelSavedVars.scrollBarStyle == nil then
-        EmotePanelSavedVars.scrollBarStyle = DEFAULT_SETTINGS.scrollBarStyle
-    end
+    EmotePanelSavedVars = EmotePanelSavedVars or {}
 
     self:CreateMainFrame()
-    self:CreateScrollFrame()
+    self:CreateWheel()
     self:CreateControls()
-    self:CreateButtons()
+    self:RefreshWheel()
     self:LoadPosition()
 
     -- Hide by default
@@ -709,7 +788,7 @@ local function CreateHelpPanel(mainPanel)
 
     local helpTitle = helpPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     helpTitle:SetPoint("TOPLEFT", 16, -16)
-    helpTitle:SetText("Button & Message List")
+    helpTitle:SetText("Emote & Message List")
 
     -- Create and store scroll frame reference both locally and globally
     local scrollFrame = CreateFrame("ScrollFrame", AddonName .. "ListScrollFrame", helpPanel,
@@ -757,12 +836,12 @@ local function CreateCustomizationPanel(mainPanel)
     -- Add customization settings
     local customTitle = customizationPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     customTitle:SetPoint("TOPLEFT", 16, -16)
-    customTitle:SetText("Button Customization")
+    customTitle:SetText("Wheel Customization")
 
     -- Add instructions
     local instructions1 = customizationPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     instructions1:SetPoint("TOPLEFT", customTitle, "BOTTOMLEFT", 0, -8)
-    instructions1:SetText("You can customize chat and party messages by right-clicking the buttons in the main panel.")
+    instructions1:SetText("Right-click a Say, Party, or Command sector, or select it and press Y/Triangle to edit.")
 
     local instructions2 = customizationPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     instructions2:SetPoint("TOPLEFT", instructions1, "BOTTOMLEFT", 0, -8)
@@ -774,7 +853,7 @@ local function CreateCustomizationPanel(mainPanel)
 
     -- Add button to reset all custom messages
     local resetCustomButton = CreateFrame("Button", nil, customizationPanel, "UIPanelButtonTemplate")
-    resetCustomButton:SetSize(200, BUTTON_HEIGHT)
+    resetCustomButton:SetSize(200, 26)
     resetCustomButton:SetText("Reset All Custom Messages")
     resetCustomButton:SetPoint("TOPLEFT", instructions3, "BOTTOMLEFT", 0, -10)
 
@@ -784,53 +863,6 @@ local function CreateCustomizationPanel(mainPanel)
     end)
 
     return customizationPanel
-end
-
-local function CreateAppearancePanel(mainPanel)
-    local appearancePanel = CreateFrame("Frame", AddonName .. "AppearancePanel", mainPanel)
-    appearancePanel.name = "Appearance"
-    appearancePanel.parent = AddonName
-
-    -- Add appearance settings
-    local appearanceTitle = appearancePanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    appearanceTitle:SetPoint("TOPLEFT", 16, -16)
-    appearanceTitle:SetText("Appearance Settings")
-
-    -- Add description
-    local description = appearancePanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    description:SetPoint("TOPLEFT", appearanceTitle, "BOTTOMLEFT", 0, -8)
-    description:SetText("Customize the appearance of your EmotePanel.")
-
-    local scrollStyleCheckbox = CreateFrame("CheckButton", nil, appearancePanel, "UICheckButtonTemplate")
-    scrollStyleCheckbox:SetSize(26, 26)
-    scrollStyleCheckbox:SetPoint("TOPLEFT", description, "BOTTOMLEFT", 0, -20)
-
-    -- Set the checkbox text
-    local checkboxText = appearancePanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    checkboxText:SetPoint("LEFT", scrollStyleCheckbox, "RIGHT", 4, 0)
-    checkboxText:SetText("Show scrollbar")
-
-    -- Add tooltip
-    scrollStyleCheckbox.tooltipText = "Toggle between basic scrolling and the standard UI scrollbar"
-
-    -- Set initial state from saved variables
-    scrollStyleCheckbox:SetChecked(EmotePanelSavedVars.scrollBarStyle)
-
-    -- Update the checkbox script
-    scrollStyleCheckbox:SetScript("OnClick", function(self)
-        local checked = self:GetChecked()
-        EmotePanel:SetScrollBarStyle(checked)
-    end)
-
-    -- Store reference to checkbox for refresh function
-    appearancePanel.scrollStyleCheckbox = scrollStyleCheckbox
-
-    -- Add refresh method
-    appearancePanel:SetScript("OnShow", function(self)
-        self.scrollStyleCheckbox:SetChecked(EmotePanelSavedVars.scrollBarStyle)
-    end)
-
-    return appearancePanel
 end
 
 local categoryIDs = {}
@@ -848,10 +880,9 @@ local function CreateInterfaceOptions()
     -- Description
     local description = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     description:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-    description:SetText("Open with /ep or bind Open or Close Emote Panel in Keybindings.\nUse the D-pad to select a row or change pages.")
+    description:SetText("Open with /ep or bind Open or Close Emote Panel in Keybindings.\nAim the right stick to select a sector or use the D-pad.")
 
     -- Create panels using our panel creation functions
-    local appearancePanel = CreateAppearancePanel(mainPanel)
     local customizationPanel = CreateCustomizationPanel(mainPanel)
     local helpPanel = CreateHelpPanel(mainPanel)
 
@@ -860,7 +891,6 @@ local function CreateInterfaceOptions()
     Settings.RegisterAddOnCategory(category)
     EmotePanel.settingsCategoryID = category:GetID()
 
-    Settings.RegisterCanvasLayoutSubcategory(category, appearancePanel, appearancePanel.name)
     Settings.RegisterCanvasLayoutSubcategory(category, customizationPanel, customizationPanel.name)
     local helpCategory = Settings.RegisterCanvasLayoutSubcategory(category, helpPanel, helpPanel.name)
     categoryIDs.help = helpCategory:GetID()
@@ -879,17 +909,15 @@ local function ShowHelp()
     print("|cFF00FF00EmotePanel Commands:|r")
     print("  /ep - Toggle EmotePanel")
     print("  /ep help - Show this help message")
-    print("  D-pad up/down: select. Left/right: change page. A/Cross: use. B/Circle: close.")
-    print("  Y/Triangle or right-click: edit a Say, Party, or Command button.")
+    print("  Right stick or D-pad up/down: select. D-pad left/right: change page.")
+    print("  A/Cross: use. B/Circle: close. Y/Triangle or right-click: edit a Say, Party, or Command sector.")
     print("  /ep config - Open settings panel")
-    print("  /ep scroll [on|off] - Toggle scrollbar style")
     print("  /ep reset - Reset all custom messages")
     print("  /ep list - Show emote list panel")
 end
 
 local function HandleSlashCommand(msg)
-    -- Split the message into command and parameter
-    local command, param = string.match(msg, "^(%S*)%s*(.-)$")
+    local command = string.match(msg, "^%s*(%S*)")
     command = command:lower()
 
     if command == "" then
@@ -907,13 +935,7 @@ local function HandleSlashCommand(msg)
         EmotePanel.frame:Hide()
         Settings.OpenToCategory(EmotePanel.settingsCategoryID)
     elseif command == "scroll" then
-        if param == "on" then
-            EmotePanel:SetScrollBarStyle(true)
-        elseif param == "off" then
-            EmotePanel:SetScrollBarStyle(false)
-        else
-            print("|cFF00FF00EmotePanel:|r Usage: /ep scroll [on|off]")
-        end
+        print("EmotePanel: All entries are visible on the wheel.")
     elseif command == "reset" then
         StaticPopup_Show("EMOTEPANEL_RESET_ALL")
     else
