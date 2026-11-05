@@ -2,7 +2,7 @@
 ## Title: EmotePanel
 ## Notes: Controller-friendly emotes and quick chat for WoW: Forever
 ## Author: Blazze
-## Version: 0.5.1
+## Version: 0.6.0
 ## SavedVariables: EmotePanelSavedVars
 
 EmotePanel.lua

@@ -7,12 +7,15 @@ _G["BINDING_NAME_Open Emote Panel"] = "Open or Close Emote Panel"
 -- Initialize the addon namespace
 _G[AddonName] = EmotePanel
 
-local PANEL_WIDTH, PANEL_HEIGHT = 432, 524
+local PANEL_WIDTH, PANEL_HEIGHT = 432, 548
 local WHEEL_SIZE = 382
 local SECTOR_COUNT = 8
 local SECTOR_ANGLE = 2 * math.pi / SECTOR_COUNT
 local WHEEL_ATLAS = "gamepad-radial-menu-wheelbg"
 local SELECTION_ATLAS = "gamepad-radial-menu-selected"
+local ICON_BORDER = "gamepad-actionbar-circleslot-border-normal"
+local SELECTED_ICON_BORDER = "gamepad-actionbar-circleslot-border-selected"
+local ICON_PATH = "Interface\\Icons\\"
 local PANEL_ATLAS = "gamepad-footer-slot-bg"
 local PANEL_BORDER_ATLAS = "gamepad-footer-slot-frameneutral"
 local FOCUS_ATLAS = "gamepad-footer-slot-framefocused"
@@ -73,87 +76,87 @@ local PANEL_MODES = {
     emotes = {
         title = "Emotes",
         list = {
-            { name = "Angry",    action = "angry",    actionType = "emote" },
-            { name = "Applause", action = "bravo",    actionType = "emote" },
-            { name = "Blush",    action = "blush",    actionType = "emote" },
-            { name = "Bow",      action = "bow",      actionType = "emote" },
-            { name = "Cackle",   action = "cackle",   actionType = "emote" },
-            { name = "Cheer",    action = "cheer",    actionType = "emote" },
-            { name = "Cry",      action = "cry",      actionType = "emote" },
-            { name = "Dance",    action = "dance",    actionType = "emote" },
-            { name = "Facepalm", action = "facepalm", actionType = "emote" },
-            { name = "Flex",     action = "flex",     actionType = "emote" },
-            { name = "Golfclap", action = "golfclap", actionType = "emote" },
-            { name = "Goodbye",  action = "bye",      actionType = "emote" },
-            { name = "Hug",      action = "hug",      actionType = "emote" },
-            { name = "Kiss",     action = "kiss",     actionType = "emote" },
-            { name = "Kneel",    action = "kneel",    actionType = "emote" },
-            { name = "Laugh",    action = "laugh",    actionType = "emote" },
-            { name = "No",       action = "no",       actionType = "emote" },
-            { name = "Point",    action = "point",    actionType = "emote" },
-            { name = "Roar",     action = "roar",     actionType = "emote" },
-            { name = "Rude",     action = "rude",     actionType = "emote" },
-            { name = "Salute",   action = "salute",    actionType = "emote" },
-            { name = "Sigh",     action = "sigh",      actionType = "emote" },
-            { name = "Sorry",    action = "apologize", actionType = "emote" },
-            { name = "Stand",    action = "stand",     actionType = "emote" },
-            { name = "Talk",     action = "talk",      actionType = "emote" },
-            { name = "Thank",    action = "thank",     actionType = "emote" },
-            { name = "Threaten", action = "threaten",  actionType = "emote" },
-            { name = "Wave",     action = "wave",      actionType = "emote" },
-            { name = "Yes",      action = "nod",       actionType = "emote" },
+            { name = "Angry",    action = "angry",    actionType = "emote", icon = "Spell_Misc_EmotionAngry" },
+            { name = "Applause", action = "bravo",    actionType = "emote", icon = "Spell_Holy_DivineHymn" },
+            { name = "Blush",    action = "blush",    actionType = "emote", icon = "INV_Misc_Flower_02" },
+            { name = "Bow",      action = "bow",      actionType = "emote", icon = "Ability_Warrior_Vigilance" },
+            { name = "Cackle",   action = "cackle",   actionType = "emote", icon = "INV_Helm_LaughingSkull_01" },
+            { name = "Cheer",    action = "cheer",    actionType = "emote", icon = "Ability_Warrior_BattleShout" },
+            { name = "Cry",      action = "cry",      actionType = "emote", icon = "Spell_Misc_EmotionSad" },
+            { name = "Dance",    action = "dance",    actionType = "emote", icon = "INV_Misc_FireDancer_01" },
+            { name = "Facepalm", action = "facepalm", actionType = "emote", icon = "Spell_Holy_BlindingHeal" },
+            { name = "Flex",     action = "flex",     actionType = "emote", icon = "Ability_Warrior_StrengthOfArms" },
+            { name = "Golfclap", action = "golfclap", actionType = "emote", icon = "Spell_Holy_SealOfWisdom" },
+            { name = "Goodbye",  action = "bye",      actionType = "emote", icon = "Spell_Magic_LesserInvisibilty" },
+            { name = "Hug",      action = "hug",      actionType = "emote", icon = "Spell_druid_bearhug" },
+            { name = "Kiss",     action = "kiss",     actionType = "emote", icon = "Spell_Shadow_SoothingKiss" },
+            { name = "Kneel",    action = "kneel",    actionType = "emote", icon = "Ability_Stealth" },
+            { name = "Laugh",    action = "laugh",    actionType = "emote", icon = "Spell_Misc_EmotionHappy" },
+            { name = "No",       action = "no",       actionType = "emote", icon = "Spell_Holy_SealOfSalvation" },
+            { name = "Point",    action = "point",    actionType = "emote", icon = "Ability_Hunter_MarkedForDeath" },
+            { name = "Roar",     action = "roar",     actionType = "emote", icon = "Ability_Druid_ChallangingRoar" },
+            { name = "Rude",     action = "rude",     actionType = "emote", icon = "Ability_Physical_Taunt" },
+            { name = "Salute",   action = "salute",    actionType = "emote", icon = "INV_Misc_Head_Human_01" },
+            { name = "Sigh",     action = "sigh",      actionType = "emote", icon = "Spell_Nature_Sleep" },
+            { name = "Sorry",    action = "apologize", actionType = "emote", icon = "Spell_Holy_PrayerOfMendingtga" },
+            { name = "Stand",    action = "stand",     actionType = "emote", icon = "Ability_Warrior_SecondWind" },
+            { name = "Talk",     action = "talk",      actionType = "emote", icon = "UI_Chat" },
+            { name = "Thank",    action = "thank",     actionType = "emote", icon = "INV_Misc_Gift_01" },
+            { name = "Threaten", action = "threaten",  actionType = "emote", icon = "Ability_Physical_Taunt_purple" },
+            { name = "Wave",     action = "wave",      actionType = "emote", icon = "Spell_Holy_LayOnHands" },
+            { name = "Yes",      action = "nod",       actionType = "emote", icon = "Interface\\RaidFrame\\ReadyCheck-Ready" },
         }
     },
     chat = {
         title = "Say Chat",
         list = {
-            { name = "Hello!",      action = "Hello! Hope you're having a great day!", actionType = "say" },
-            { name = "Well played", action = "Well played! That was awesome!",         actionType = "say" },
-            { name = "Thanks",      action = "Thank you! Really appreciate it!",       actionType = "say" },
-            { name = "No problem",  action = "No problem! Happy to help!",             actionType = "say" },
-            { name = "BRB",         action = "Be right back, quick break",             actionType = "say" },
-            { name = "Bye",         action = "Farewell! Have a great adventure!",      actionType = "say" },
-            { name = "LFG",         action = "Looking for group! Anyone interested?",  actionType = "say" },
-            { name = "Quest",       action = "Anyone working on this quest?",          actionType = "say" },
-            { name = "Gratz",       action = "Congratulations!",                       actionType = "say" },
-            { name = "Trade",       action = "Would you like to trade?",               actionType = "say" },
+            { name = "Hello!",      action = "Hello! Hope you're having a great day!", actionType = "say", icon = "Spell_Misc_EmotionHappy" },
+            { name = "Well played", action = "Well played! That was awesome!",         actionType = "say", icon = "Achievement_General_StayClassy" },
+            { name = "Thanks",      action = "Thank you! Really appreciate it!",       actionType = "say", icon = "INV_Misc_GiftWrap_01" },
+            { name = "No problem",  action = "No problem! Happy to help!",             actionType = "say", icon = "Spell_Holy_BlessingOfProtection" },
+            { name = "BRB",         action = "Be right back, quick break",             actionType = "say", icon = "INV_Misc_PocketWatch_01" },
+            { name = "Bye",         action = "Farewell! Have a great adventure!",      actionType = "say", icon = "INV_Garrison_Hearthstone" },
+            { name = "LFG",         action = "Looking for group! Anyone interested?",  actionType = "say", icon = "INV_Misc_GroupLooking" },
+            { name = "Quest",       action = "Anyone working on this quest?",          actionType = "say", icon = "INV_Misc_Book_09" },
+            { name = "Gratz",       action = "Congratulations!",                       actionType = "say", icon = "INV_Misc_CelebrationCake_01" },
+            { name = "Trade",       action = "Would you like to trade?",               actionType = "say", icon = "INV_Misc_Coin_01" },
         }
     },
     party = {
         title = "Party Chat",
         list = {
-            { name = "Follow Me",    action = "Follow me please!",                     actionType = "party" },
-            { name = "Need Break",   action = "Need a quick break! Back in 5 minutes", actionType = "party" },
-            { name = "Thanks Group", action = "Thanks everyone for the great run!",    actionType = "party" },
-            { name = "Good Job",     action = "Great job team! Well executed!",        actionType = "party" },
-            { name = "Ready Check",  action = "Everyone ready to continue?",           actionType = "party" },
-            { name = "OOM",          action = "Out of mana, need to drink!",           actionType = "party" },
-            { name = "Wait",         action = "Please wait for everyone!",             actionType = "party" },
-            { name = "Pulling",      action = "Pulling in 5 seconds!",                 actionType = "party" },
-            { name = "CC",           action = "Please use crowd control!",             actionType = "party" },
-            { name = "Help",         action = "Need help here!",                       actionType = "party" },
+            { name = "Follow Me",    action = "Follow me please!",                     actionType = "party", icon = "Ability_Hunter_Pathfinding" },
+            { name = "Need Break",   action = "Need a quick break! Back in 5 minutes", actionType = "party", icon = "INV_Drink_05" },
+            { name = "Thanks Group", action = "Thanks everyone for the great run!",    actionType = "party", icon = "INV_Misc_GiftWrap_02" },
+            { name = "Good Job",     action = "Great job team! Well executed!",        actionType = "party", icon = "Achievement_Level_10" },
+            { name = "Ready Check",  action = "Everyone ready to continue?",           actionType = "party", icon = "Interface\\RaidFrame\\ReadyCheck-Ready" },
+            { name = "OOM",          action = "Out of mana, need to drink!",           actionType = "party", icon = "INV_Potion_76" },
+            { name = "Wait",         action = "Please wait for everyone!",             actionType = "party", icon = "INV_Misc_PocketWatch_02" },
+            { name = "Pulling",      action = "Pulling in 5 seconds!",                 actionType = "party", icon = "Ability_Hunter_SniperShot" },
+            { name = "CC",           action = "Please use crowd control!",             actionType = "party", icon = "Spell_Nature_Polymorph" },
+            { name = "Help",         action = "Need help here!",                       actionType = "party", icon = "Spell_Holy_Resurrection" },
         }
     },
     commands = {
         title = "Commands",
         list = {
             -- Saved commands and favorites refer to these slot numbers. Append new entries.
-            { name = "Invite Target",   action = "invite",     actionType = "command" },
-            { name = "Inspect Target",  action = "inspect",    actionType = "command" },
-            { name = "Trade Target",    action = "trade",      actionType = "command" },
-            { name = "Follow Target",   action = "follow",     actionType = "command" },
-            { name = "Befriend Target", action = "friend",     actionType = "command" },
-            { name = "Roll",            action = "roll",       actionType = "command" },
-            { name = "Ready Check",     action = "readycheck", actionType = "command" },
-            { name = "Who",             action = "who",        actionType = "command" },
-            { name = "Leave Channel",   action = "leave",      actionType = "command" },
-            { name = "Reload UI",       action = "reload",     actionType = "command" },
-            { name = "Pull in 5s",      action = (SLASH_COUNTDOWN1 or "/countdown") .. " 5", actionType = "command" },
-            { name = "Pull in 10s",     action = (SLASH_COUNTDOWN1 or "/countdown") .. " 10", actionType = "command" },
-            { name = "Mark Skull",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " !8", actionType = "command" },
-            { name = "Mark Cross",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " !7", actionType = "command" },
-            { name = "Clear Mark",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " 0", actionType = "command" },
-            { name = "Dismount",        action = SLASH_DISMOUNT1 or "/dismount", actionType = "command" },
+            { name = "Invite Target",   action = "invite",     actionType = "command", icon = "INV_Misc_GroupNeedMore" },
+            { name = "Inspect Target",  action = "inspect",    actionType = "command", icon = "INV_Professions_Inscription_ScribesMagnifyingGlass_Gold" },
+            { name = "Trade Target",    action = "trade",      actionType = "command", icon = "INV_Misc_Coin_02" },
+            { name = "Follow Target",   action = "follow",     actionType = "command", icon = "Ability_Tracking" },
+            { name = "Befriend Target", action = "friend",     actionType = "command", icon = "INV_ValentinesCard01" },
+            { name = "Roll",            action = "roll",       actionType = "command", icon = "INV_Misc_Dice_02" },
+            { name = "Ready Check",     action = "readycheck", actionType = "command", icon = "Interface\\RaidFrame\\ReadyCheck-Ready" },
+            { name = "Who",             action = "who",        actionType = "command", icon = "INV_Misc_Spyglass_02" },
+            { name = "Leave Channel",   action = "leave",      actionType = "command", icon = "Spell_Shadow_Teleport" },
+            { name = "Reload UI",       action = "reload",     actionType = "command", icon = "INV_Misc_Gear_01" },
+            { name = "Pull in 5s",      action = (SLASH_COUNTDOWN1 or "/countdown") .. " 5", actionType = "command", icon = "INV_Misc_PocketWatch_01" },
+            { name = "Pull in 10s",     action = (SLASH_COUNTDOWN1 or "/countdown") .. " 10", actionType = "command", icon = "INV_Misc_PocketWatch_03" },
+            { name = "Mark Skull",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " !8", actionType = "command", icon = "Interface\\TARGETINGFRAME\\UI-RaidTargetingIcon_8" },
+            { name = "Mark Cross",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " !7", actionType = "command", icon = "Interface\\TARGETINGFRAME\\UI-RaidTargetingIcon_7" },
+            { name = "Clear Mark",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " 0", actionType = "command", icon = "Interface\\RaidFrame\\ReadyCheck-NotReady" },
+            { name = "Dismount",        action = SLASH_DISMOUNT1 or "/dismount", actionType = "command", icon = "Ability_Mount_RidingHorse" },
         }
     }
 }
@@ -471,11 +474,11 @@ function EmotePanel:Select(index)
     if index == self.selected then return end
 
     if self.selected then
-        self.labels[self.selected]:SetTextColor(0.9, 0.86, 0.79)
+        self.slots[self.selected].border:SetAtlas(ICON_BORDER)
     end
     self.selected = index
     self.highlight:Show()
-    self.labels[index]:SetTextColor(1, 1, 1)
+    self.slots[index].border:SetAtlas(SELECTED_ICON_BORDER)
     local angle = (index - 1) * SECTOR_ANGLE
     local radius = self.highlightRadius
     self.highlight:SetPoint("CENTER", self.wheel, "CENTER", math.sin(angle) * radius, math.cos(angle) * radius)
@@ -483,7 +486,6 @@ function EmotePanel:Select(index)
     self.highlight:SetRotation(math.pi - angle)
     local mode, slot, data = GetSectorEntry(index)
     self.selectionName:SetText(GetEntryName(mode, slot, data))
-    self.selectionIndex:SetFormattedText("%02d / %02d", index, currentPage.count)
     self:RefreshGamepadHint()
 end
 
@@ -558,30 +560,30 @@ function EmotePanel:CreateWheel()
     self.highlightRadius = 150 * scale
     local innerRadius, outerRadius = 75 * scale, 234 * scale
 
-    self.labels = {}
+    self.slots = {}
     for index = 1, SECTOR_COUNT do
-        local label = wheel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        label:SetWidth(99)
-        label:SetJustifyH("CENTER")
-        label:SetWordWrap(false)
-        self.labels[index] = label
+        local slot = CreateFrame("Frame", nil, wheel)
+        slot:SetSize(46, 46)
+        local angle = (index - 1) * SECTOR_ANGLE
+        local radius = self.highlightRadius
+        slot:SetPoint("CENTER", wheel, "CENTER", math.sin(angle) * radius, math.cos(angle) * radius)
+
+        local icon = slot:CreateTexture(nil, "ARTWORK")
+        icon:SetSize(38, 38)
+        icon:SetPoint("CENTER")
+        local mask = slot:CreateMaskTexture()
+        mask:SetAtlas("CircleMask")
+        mask:SetAllPoints(icon)
+        icon:AddMaskTexture(mask)
+        slot.icon = icon
+        slot.border = AddAtlas(slot, ICON_BORDER, "OVERLAY")
+        slot.border:SetAllPoints()
+
+        slot.favorite = AddAtlas(slot, "collections-icon-favorites", "OVERLAY")
+        slot.favorite:SetSize(16, 16)
+        slot.favorite:SetPoint("TOPRIGHT", 3, 3)
+        self.slots[index] = slot
     end
-
-    local selectionCaption = wheel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    selectionCaption:SetPoint("CENTER", 0, 31)
-    selectionCaption:SetTextColor(0.91, 0.76, 0.49)
-    selectionCaption:SetText("SELECTED")
-    self.selectionCaption = selectionCaption
-
-    self.selectionName = wheel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-    self.selectionName:SetPoint("CENTER")
-    self.selectionName:SetWidth(96)
-    self.selectionName:SetMaxLines(2)
-    self.selectionName:SetTextColor(1, 0.96, 0.87)
-
-    self.selectionIndex = wheel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    self.selectionIndex:SetPoint("CENTER", 0, -31)
-    self.selectionIndex:SetTextColor(0.74, 0.65, 0.51)
 
     local function SectorUnderCursor(cursorX, cursorY)
         local centerX, centerY = wheel:GetCenter()
@@ -653,27 +655,25 @@ function EmotePanel:CreateWheel()
 end
 
 function EmotePanel:RefreshWheel(selection)
-    for index, label in ipairs(self.labels) do
+    for index, slot in ipairs(self.slots) do
         local used = index <= currentPage.count
         if used then
-            local mode, slot, data = GetSectorEntry(index)
-            local angle = (index - 1) * SECTOR_ANGLE
-            local radius = self.highlightRadius
-            label:SetPoint("CENTER", self.wheel, "CENTER", math.sin(angle) * radius, math.cos(angle) * radius)
-            local name = GetEntryName(mode, slot, data)
-            local customMessage = data.actionType ~= "emote" and GetCustomMessage(mode, slot)
-            local favorite = currentPage.mode ~= "favorites" and FindFavorite(mode, slot)
-            local badge = favorite and CreateAtlasMarkup("collections-icon-favorites", 12, 12) .. " " or ""
-            label:SetText(badge .. name .. (customMessage and "*" or ""))
-            label:SetTextColor(0.9, 0.86, 0.79)
+            local mode, entryIndex, data = GetSectorEntry(index)
+            if data.icon:find("\\", 1, true) then
+                slot.icon:SetTexture(data.icon)
+                slot.icon:SetTexCoord(0, 1, 0, 1)
+            else
+                slot.icon:SetTexture(ICON_PATH .. data.icon)
+                slot.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+            end
+            slot.border:SetAtlas(ICON_BORDER)
+            slot.favorite:SetShown(currentPage.mode ~= "favorites" and FindFavorite(mode, entryIndex) ~= nil)
         end
-        label:SetShown(used)
+        slot:SetShown(used)
     end
     local nextSelection = selection or self.selected or 1
     self.selected = nil
     local hasEntries = currentPage.count > 0
-    self.selectionCaption:SetShown(hasEntries)
-    self.selectionIndex:SetShown(hasEntries)
     if hasEntries then
         self:Select(math.min(nextSelection, currentPage.count))
     else
@@ -731,13 +731,18 @@ function EmotePanel:CreateControls()
     end)
 
     local footer = AddAtlas(frame, "gamepad-radial-menu-bottomtext", "BORDER")
-    footer:SetSize(410, 78)
+    footer:SetSize(410, 102)
     footer:SetPoint("BOTTOM", 0, 7)
 
+    self.selectionName = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    self.selectionName:SetPoint("TOP", 0, -442)
+    self.selectionName:SetWidth(386)
+    self.selectionName:SetWordWrap(false)
+    self.selectionName:SetTextColor(1, 0.96, 0.87)
     self.navigationHint = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    self.navigationHint:SetPoint("TOP", 0, -446)
+    self.navigationHint:SetPoint("TOP", 0, -470)
     self.gamepadHint = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    self.gamepadHint:SetPoint("TOP", 0, -483)
+    self.gamepadHint:SetPoint("TOP", 0, -507)
     frame:HookScript("OnShow", function() self:ShowPage(1, 1) end)
     if InputDeviceIconSetManager then
         InputDeviceIconSetManager:RegisterActiveInputDeviceIconSetUpdatedCallback(self.RefreshGamepadHint, self)
