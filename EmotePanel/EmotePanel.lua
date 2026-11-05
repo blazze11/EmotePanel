@@ -12,9 +12,10 @@ local BUTTON_HEIGHT = 26
 local ROW_HEIGHT = 30
 local BUTTON_WIDTH = 162
 local VISIBLE_ROWS = 6
+local HEADER_CENTER_Y = -16
 local LIST_SIDE_INSET = 30
 local LIST_TOP_INSET = 38
-local LIST_BOTTOM_INSET = 49
+local LIST_BOTTOM_INSET = 54
 local PANEL_WIDTH = 236
 local PANEL_HEIGHT = LIST_TOP_INSET + VISIBLE_ROWS * ROW_HEIGHT + LIST_BOTTOM_INSET
 
@@ -274,7 +275,15 @@ StaticPopupDialogs["EMOTEPANEL_RESET_ALL"] = {
     hideOnEscape = true,
     preferredIndex = 3,
 }
--- Create Dialog Frame
+local function SetUpDialogHeader(frame)
+    frame.Title:ClearAllPoints()
+    frame.Title:SetPoint("CENTER", frame, "TOP", 0, HEADER_CENTER_Y)
+
+    local closeButton = _G[frame:GetName() .. "Close"]
+    closeButton:ClearAllPoints()
+    closeButton:SetPoint("RIGHT", frame, "TOPRIGHT", -6, HEADER_CENTER_Y)
+end
+
 local function CreateCustomMessageDialog()
     local dialog = CreateFrame("Frame", "EmotePanelCustomMessageDialog", UIParent, "UIPanelDialogTemplate")
     dialog:SetSize(280, 200)
@@ -283,10 +292,8 @@ local function CreateCustomMessageDialog()
     dialog:SetFrameLevel(100)
     dialog:EnableMouse(true)
 
-    -- Title
-    local title = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOP", 0, -10)
-    title:SetText("Customize Button")
+    SetUpDialogHeader(dialog)
+    dialog.Title:SetText("Customize Button")
 
     -- Name Label
     local nameLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
@@ -359,13 +366,6 @@ local function CreateCustomMessageDialog()
         dialog:StopMovingOrSizing()
     end)
 
-    local closeButton = _G[dialog:GetName() .. "Close"]
-    if closeButton then
-        closeButton:ClearAllPoints()
-        closeButton:SetPoint("TOPRIGHT", dialog, "TOPRIGHT", 1.5, 1.5)
-        closeButton:SetFrameLevel(dialog:GetFrameLevel() + 1)
-    end
-
     return dialog
 end
 -- EmotePanel Methods
@@ -381,16 +381,7 @@ function EmotePanel:CreateMainFrame()
     frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
 
-    -- Get the close button that was created by UIPanelDialogTemplate
-    local closeButton = _G[frame:GetName() .. "Close"]
-    if closeButton then
-        -- Clear the existing position
-        closeButton:ClearAllPoints()
-        -- Set the new position - for example, moving it to the top-left corner
-        closeButton:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 1.5, 1.5)
-        -- Optionally adjust the frame level if needed
-        closeButton:SetFrameLevel(frame:GetFrameLevel() + 1)
-    end
+    SetUpDialogHeader(frame)
 
     -- Make frame draggable
     frame:RegisterForDrag("LeftButton")
@@ -500,6 +491,7 @@ function EmotePanel:CreateButtons(selection)
         end
 
         local customizable = data.actionType ~= "emote"
+        button.customizable = customizable
         local customName = customizable and GetCustomButtonName(mode, index)
         local customMessage = customizable and GetCustomMessage(mode, index)
         button:SetText((customName or data.name) .. (customMessage and "*" or ""))
@@ -534,21 +526,20 @@ end
 
 function EmotePanel:CreateControls()
     local frame = self.frame
-    self.titleText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    self.titleText:SetPoint("TOP", 0, -14)
+    self.titleText = frame.Title
     self.titleText:SetText(PANEL_MODES[currentMode].title)
 
     local previous = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    previous:SetSize(24, 22)
-    previous:SetPoint("RIGHT", self.titleText, "LEFT", -8, 0)
+    previous:SetSize(24, 18)
+    previous:SetPoint("CENTER", frame, "TOP", -66, HEADER_CENTER_Y)
     previous:SetText("<")
     previous:SetScript("OnClick", function()
         self:CycleMode(-1)
     end)
 
     local nextPage = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate")
-    nextPage:SetSize(24, 22)
-    nextPage:SetPoint("LEFT", self.titleText, "RIGHT", 8, 0)
+    nextPage:SetSize(24, 18)
+    nextPage:SetPoint("CENTER", frame, "TOP", 66, HEADER_CENTER_Y)
     nextPage:SetText(">")
     nextPage:SetScript("OnClick", function()
         self:CycleMode(1)
@@ -567,7 +558,34 @@ function EmotePanel:CreateControls()
     hint:SetPoint("BOTTOMLEFT", 12, 12)
     hint:SetPoint("BOTTOMRIGHT", help, "BOTTOMLEFT", -8, 2)
     hint:SetJustifyH("CENTER")
-    hint:SetText("D-pad: Select / Page\nA / Cross: Use   B / Circle: Close")
+    self.gamepadHint = hint
+    frame:HookScript("OnShow", function()
+        self:RefreshGamepadHint()
+    end)
+    if InputDeviceIconSetManager then
+        InputDeviceIconSetManager:RegisterActiveInputDeviceIconSetUpdatedCallback(self.RefreshGamepadHint, self)
+    end
+end
+
+local function GamepadGlyph(key, fallback)
+    local icons = InputIconTextureSetUtility
+    if icons and icons.GetActiveInputIconButtonTextures(key) then
+        local atlas = icons.GetNormalActiveInputIconButtonTexture(key)
+        if type(atlas) == "string" then
+            return CreateAtlasMarkup(atlas, 16, 16)
+        end
+    end
+    return fallback
+end
+
+function EmotePanel:RefreshGamepadHint()
+    local direction = GamepadGlyph("DIRPADVERTICAL", "Up/Down") .. " Select    "
+        .. GamepadGlyph("DIRPADHORIZONTAL", "Left/Right") .. " Page"
+    local actions = GamepadGlyph("PAD1", "A") .. " Use    "
+    if self.buttons and self.buttons[self.selected].customizable then
+        actions = actions .. GamepadGlyph("PAD4", "Y") .. " Edit    "
+    end
+    self.gamepadHint:SetText(direction .. "\n" .. actions .. GamepadGlyph("PAD2", "B") .. " Close")
 end
 
 function EmotePanel:CycleMode(direction)
@@ -577,6 +595,18 @@ function EmotePanel:CycleMode(direction)
     GameTooltip:Hide()
     self.scrollFrame:SetVerticalScroll(0)
     self:CreateButtons(1)
+    self:RefreshGamepadHint()
+end
+
+function EmotePanel:ClickSelected(mouseButton)
+    local scrollFrame = self.scrollFrame
+    local top = (self.selected - 1) * ROW_HEIGHT
+    local offset = scrollFrame:GetVerticalScroll()
+    if top < offset or top + BUTTON_HEIGHT > offset + scrollFrame:GetHeight() then
+        self:Select(self.selected)
+        return
+    end
+    self.buttons[self.selected]:Click(mouseButton)
 end
 
 function EmotePanel:SetupGamepad()
@@ -587,24 +617,17 @@ function EmotePanel:SetupGamepad()
         PADDDOWN = function() self:Select(self.selected + 1) end,
         PADDLEFT = function() self:CycleMode(-1) end,
         PADDRIGHT = function() self:CycleMode(1) end,
-        PAD1 = function()
-            local scrollFrame = self.scrollFrame
-            local top = (self.selected - 1) * ROW_HEIGHT
-            local offset = scrollFrame:GetVerticalScroll()
-            if top < offset or top + BUTTON_HEIGHT > offset + scrollFrame:GetHeight() then
-                self:Select(self.selected)
-                return
-            end
-            self.buttons[self.selected]:Click("LeftButton")
-        end,
+        PAD1 = function() self:ClickSelected("LeftButton") end,
         PAD2 = function() frame:Hide() end,
+        PAD4 = function() self:ClickSelected("RightButton") end,
     }
-    local function CanUsePanelControls()
-        return not ((self.customMessageDialog and self.customMessageDialog:IsShown())
+    local function CanUsePanelControls(key)
+        return (key ~= "PAD4" or self.buttons[self.selected].customizable)
+            and not ((self.customMessageDialog and self.customMessageDialog:IsShown())
             or StaticPopup_Visible("EMOTEPANEL_RESET_BUTTON") or StaticPopup_Visible("EMOTEPANEL_RESET_ALL"))
     end
     frame:SetScript("OnGamePadButtonDown", function(_, key)
-        if not actions[key] or IsModifierKeyDown() or not CanUsePanelControls() then
+        if not actions[key] or IsModifierKeyDown() or not CanUsePanelControls(key) then
             return true
         end
         pressed[key] = true
@@ -615,7 +638,7 @@ function EmotePanel:SetupGamepad()
             return true
         end
         pressed[key] = nil
-        if CanUsePanelControls() then
+        if CanUsePanelControls(key) then
             actions[key]()
         end
         return false
@@ -857,6 +880,7 @@ local function ShowHelp()
     print("  /ep - Toggle EmotePanel")
     print("  /ep help - Show this help message")
     print("  D-pad up/down: select. Left/right: change page. A/Cross: use. B/Circle: close.")
+    print("  Y/Triangle or right-click: edit a Say, Party, or Command button.")
     print("  /ep config - Open settings panel")
     print("  /ep scroll [on|off] - Toggle scrollbar style")
     print("  /ep reset - Reset all custom messages")
