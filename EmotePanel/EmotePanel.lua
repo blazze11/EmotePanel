@@ -489,7 +489,7 @@ local function CreateIconPicker(dialog)
     local columns, rows = 8, 5
     local pageSize = columns * rows
     local picker = CreateFrame("Frame", nil, dialog)
-    picker:SetSize(392, 322)
+    picker:SetSize(392, 342)
     picker:SetPoint("CENTER", UIParent, "CENTER", 0, 100)
     picker:SetFrameLevel(dialog:GetFrameLevel() + 10)
     picker:SetClampedToScreen(true)
@@ -503,20 +503,54 @@ local function CreateIconPicker(dialog)
         for _, data in ipairs(PANEL_MODES[mode].list) do
             local icon = GetIconPath(data.icon)
             if not seen[icon] then
-                seen[icon] = true
                 table.insert(wheelIcons, icon)
+                seen[icon] = #wheelIcons
             end
         end
     end
 
     local title = picker:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
     title:SetPoint("TOP", 0, -15)
-    local status = picker:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    status:SetPoint("BOTTOM", 0, 50)
+    local function CreateOutline(parent, edgeSize, r, g, b)
+        local outline = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+        outline:SetBackdrop({ edgeFile = "Interface\\Buttons\\WHITE8X8", edgeSize = edgeSize })
+        outline:SetBackdropBorderColor(r, g, b, 1)
+        return outline
+    end
+
+    local cursor = CreateOutline(picker, 5, 0.07, 0.05, 0.02)
+    cursor:SetFrameLevel(picker:GetFrameLevel() + 3)
+    local cursorGold = CreateOutline(cursor, 3, 1, 0.82, 0.22)
+    cursorGold:SetPoint("TOPLEFT", 1, -1)
+    cursorGold:SetPoint("BOTTOMRIGHT", -1, 1)
+
+    local preview = picker:CreateTexture(nil, "ARTWORK")
+    preview:SetSize(46, 46)
+    preview:SetPoint("BOTTOMLEFT", 111, 31)
+    local previewBorder = AddAtlas(picker, "gamepad-actionbar-squareslot-border-selected", "OVERLAY")
+    previewBorder:SetAllPoints(preview)
+    local selectedLabel = picker:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    selectedLabel:SetPoint("LEFT", preview, "RIGHT", 8, 8)
+    selectedLabel:SetText("Selected")
+    local status = picker:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    status:SetPoint("LEFT", preview, "RIGHT", 8, -9)
     local hint = picker:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     hint:SetPoint("BOTTOM", 0, 10)
 
     local buttons = {}
+    local function UpdateCursor()
+        local button = buttons[picker.selected]
+        local shown = button ~= nil and button.value ~= nil
+        cursor:SetShown(shown)
+        preview:SetShown(shown)
+        if shown then
+            cursor:ClearAllPoints()
+            cursor:SetPoint("TOPLEFT", button, "TOPLEFT", -2, 2)
+            cursor:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 2, -2)
+            preview:SetTexture(button.value)
+        end
+    end
+
     local function Choose(icon)
         dialog.pendingIcon = icon
         dialog.icon:SetTexture(icon)
@@ -551,17 +585,16 @@ local function CreateIconPicker(dialog)
             button:SetShown(icon ~= nil)
             if icon then
                 button.icon:SetTexture(icon)
-                button.focus:SetShown(index == self.selected)
+                button.current:SetShown(icon == dialog.pendingIcon)
             end
         end
+        UpdateCursor()
     end
 
     function picker:MoveSelection(delta)
         local count = math.min(pageSize, self:GetIconCount() - (self.page - 1) * pageSize)
         self.selected = math.max(1, math.min(self.selected + delta, count))
-        for index, button in ipairs(buttons) do
-            button.focus:SetShown(index == self.selected)
-        end
+        UpdateCursor()
     end
 
     function picker:ChangePage(delta)
@@ -579,7 +612,15 @@ local function CreateIconPicker(dialog)
             self.provider:Init(IconDataProviderExtraType.None)
         end
         self.library = not self.library
-        self.page, self.selected = 1, 1
+        local index
+        if self.library then
+            index = self.provider:GetIndexOfIcon(dialog.pendingIcon)
+        else
+            index = seen[dialog.pendingIcon]
+        end
+        index = index or 1
+        self.page = math.ceil(index / pageSize)
+        self.selected = (index - 1) % pageSize + 1
         self:Refresh()
     end
 
@@ -594,9 +635,10 @@ local function CreateIconPicker(dialog)
         button:SetPoint("TOPLEFT", 23 + ((index - 1) % columns) * 44, -43 - math.floor((index - 1) / columns) * 42)
         button.icon = button:CreateTexture(nil, "ARTWORK")
         button.icon:SetAllPoints()
-        button.focus = AddAtlas(button, FOCUS_ATLAS, "OVERLAY")
-        button.focus:SetPoint("TOPLEFT", -2, 2)
-        button.focus:SetPoint("BOTTOMRIGHT", 2, -2)
+        button.current = button:CreateTexture(nil, "OVERLAY")
+        button.current:SetTexture("Interface\\RaidFrame\\ReadyCheck-Ready")
+        button.current:SetSize(16, 16)
+        button.current:SetPoint("BOTTOMRIGHT", -2, 2)
         button:SetHighlightAtlas(FOCUS_ATLAS)
         button:SetScript("OnClick", function()
             if button.value then Choose(button.value) end
@@ -624,7 +666,10 @@ local function CreateIconPicker(dialog)
 
     picker:SetScript("OnMouseWheel", function(_, delta) picker:ChangePage(delta > 0 and -1 or 1) end)
     picker:SetScript("OnShow", function()
-        picker.page, picker.selected, picker.library = 1, 1, false
+        local index = seen[dialog.pendingIcon] or 1
+        picker.page = math.ceil(index / pageSize)
+        picker.selected = (index - 1) % pageSize + 1
+        picker.library = false
         picker:Refresh()
     end)
     picker:SetScript("OnHide", function()
