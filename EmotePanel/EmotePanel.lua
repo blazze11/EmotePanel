@@ -7,7 +7,7 @@ _G["BINDING_NAME_Open Emote Panel"] = "Open or Close Emote Panel"
 -- Initialize the addon namespace
 _G[AddonName] = EmotePanel
 
-local PANEL_WIDTH, PANEL_HEIGHT = 432, 548
+local PANEL_WIDTH, PANEL_HEIGHT = 432, 652
 local WHEEL_SIZE = 382
 local SECTOR_COUNT = 8
 local SECTOR_ANGLE = 2 * math.pi / SECTOR_COUNT
@@ -35,6 +35,26 @@ local DEFAULT_POSITIONS = {
         y = 0
     },
 }
+
+local function GetIconPath(icon)
+    if type(icon) == "number" or icon:find("\\", 1, true) then return icon end
+    return ICON_PATH .. icon
+end
+
+local function GetEntryIcon(mode, index, data)
+    local overrides = EmotePanelSavedVars.customIcons
+    local icon = overrides and overrides[mode] and overrides[mode][index]
+    if type(icon) == "number" and icon > 0 or type(icon) == "string" and icon ~= "" then
+        return GetIconPath(icon)
+    end
+    return GetIconPath(data.icon)
+end
+
+local function SaveEntryIcon(mode, index, icon)
+    local overrides = EmotePanelSavedVars.customIcons
+    overrides[mode] = overrides[mode] or {}
+    overrides[mode][index] = icon
+end
 
 local function GetCustomMessage(mode, index)
     if not EmotePanelSavedVars.customMessages then
@@ -276,6 +296,13 @@ local function NeedsLockedTarget(verb, arguments)
     return false
 end
 
+local function GetEntryPreview(mode, index, data)
+    if data.actionType == "emote" then return "/" .. data.action end
+    local text = GetCustomMessage(mode, index) or data.action
+    if data.actionType == "command" then return "/" .. text:gsub("^/+", "") end
+    return text
+end
+
 local function ExecuteAction(mode, index, data)
     if data.actionType == "emote" then
         local alias = "/" .. data.action:upper()
@@ -283,8 +310,7 @@ local function ExecuteAction(mode, index, data)
         local targetName = not HasLockedTarget() and "none" or nil
         C_ChatInfo.PerformEmote(token, targetName)
     elseif data.actionType == "command" then
-        local command = GetCustomMessage(mode, index) or data.action
-        command = "/" .. command:gsub("^/+", "")
+        local command = GetEntryPreview(mode, index, data)
         if not HasLockedTarget() then
             local verb, arguments = command:match("^(%S+)%s*(.-)%s*$")
             if verb and NeedsLockedTarget(verb:lower(), arguments) then
@@ -342,7 +368,7 @@ local function RefreshListContent(helpPanel)
 end
 
 StaticPopupDialogs["EMOTEPANEL_RESET_BUTTON"] = {
-    text = "Are you sure you want to reset this button?\nThis will remove any custom message.",
+    text = "Reset this entry to its default icon, name, and text?",
     button1 = "Yes",
     button2 = "No",
     OnAccept = function(self, data)
@@ -354,6 +380,7 @@ StaticPopupDialogs["EMOTEPANEL_RESET_BUTTON"] = {
                 EmotePanelSavedVars.customButtonNames[data.mode][data.index] = nil
             end
 
+            SaveEntryIcon(data.mode, data.index, nil)
             EmotePanel:RefreshWheel()
 
             if data.dialog then
@@ -376,12 +403,13 @@ StaticPopupDialogs["EMOTEPANEL_RESET_BUTTON"] = {
 }
 
 StaticPopupDialogs["EMOTEPANEL_RESET_ALL"] = {
-    text = "Are you sure you want to reset all custom messages?\nThis cannot be undone.",
+    text = "Reset all custom names, messages, commands, and icons?",
     button1 = "Yes",
     button2 = "No",
     OnAccept = function()
         EmotePanelSavedVars.customMessages = {}
         EmotePanelSavedVars.customButtonNames = {}
+        EmotePanelSavedVars.customIcons = {}
 
         if EmotePanel.frame then
             EmotePanel:RefreshWheel()
@@ -392,7 +420,7 @@ StaticPopupDialogs["EMOTEPANEL_RESET_ALL"] = {
             helpPanel:refresh()
         end
 
-        print("|cFF00FF00EmotePanel:|r All custom messages have been reset")
+        print("|cFF00FF00EmotePanel:|r All custom entries have been reset")
     end,
     timeout = 0,
     whileDead = true,
@@ -453,12 +481,165 @@ local function CreateEditorField(dialog, labelText, y, maxLetters)
     focus:Hide()
     box:HookScript("OnEditFocusGained", function() focus:Show() end)
     box:HookScript("OnEditFocusLost", function() focus:Hide() end)
+    box.label = label
     return box
+end
+
+local function CreateIconPicker(dialog)
+    local columns, rows = 8, 5
+    local pageSize = columns * rows
+    local picker = CreateFrame("Frame", nil, dialog)
+    picker:SetSize(392, 322)
+    picker:SetPoint("CENTER", UIParent, "CENTER", 0, 100)
+    picker:SetFrameLevel(dialog:GetFrameLevel() + 10)
+    picker:SetClampedToScreen(true)
+    picker:EnableMouse(true)
+    picker:EnableMouseWheel(true)
+    SkinPanel(picker)
+    CreateCloseButton(picker)
+
+    local wheelIcons, seen = {}, {}
+    for _, mode in ipairs(modeOrder) do
+        for _, data in ipairs(PANEL_MODES[mode].list) do
+            local icon = GetIconPath(data.icon)
+            if not seen[icon] then
+                seen[icon] = true
+                table.insert(wheelIcons, icon)
+            end
+        end
+    end
+
+    local title = picker:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    title:SetPoint("TOP", 0, -15)
+    local status = picker:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    status:SetPoint("BOTTOM", 0, 50)
+    local hint = picker:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    hint:SetPoint("BOTTOM", 0, 10)
+
+    local buttons = {}
+    local function Choose(icon)
+        dialog.pendingIcon = icon
+        dialog.icon:SetTexture(icon)
+        picker:Hide()
+    end
+
+    function picker:GetIconCount()
+        return self.library and self.provider:GetNumIcons() or #wheelIcons
+    end
+
+    function picker:Refresh()
+        local count = self:GetIconCount()
+        local pages = math.ceil(count / pageSize)
+        local offset = (self.page - 1) * pageSize
+        self.selected = math.min(self.selected, count - offset)
+        title:SetText(self.library and "WoW Icon Library" or "Wheel Icons")
+        hint:SetText(self.library and "D-pad: Select   LB/RB: Page   A: Choose   B: Back   Y: Wheel Icons"
+            or "D-pad: Select   LB/RB: Page   A: Choose   B: Back   Y: Library")
+        self.libraryButton:SetText(self.library and "Wheel" or "Library")
+        status:SetFormattedText("%d / %d", self.page, pages)
+        for index, button in ipairs(buttons) do
+            local absoluteIndex = offset + index
+            local icon
+            if absoluteIndex <= count then
+                if self.library then
+                    icon = self.provider:GetIconByIndex(absoluteIndex)
+                else
+                    icon = wheelIcons[absoluteIndex]
+                end
+            end
+            button.value = icon
+            button:SetShown(icon ~= nil)
+            if icon then
+                button.icon:SetTexture(icon)
+                button.focus:SetShown(index == self.selected)
+            end
+        end
+    end
+
+    function picker:MoveSelection(delta)
+        local count = math.min(pageSize, self:GetIconCount() - (self.page - 1) * pageSize)
+        self.selected = math.max(1, math.min(self.selected + delta, count))
+        for index, button in ipairs(buttons) do
+            button.focus:SetShown(index == self.selected)
+        end
+    end
+
+    function picker:ChangePage(delta)
+        local lastPage = math.ceil(self:GetIconCount() / pageSize)
+        local page = math.max(1, math.min(self.page + delta, lastPage))
+        if page ~= self.page then
+            self.page = page
+            self:Refresh()
+        end
+    end
+
+    function picker:ToggleLibrary()
+        if not self.provider then
+            self.provider = CreateFromMixins(IconDataProviderMixin)
+            self.provider:Init(IconDataProviderExtraType.None)
+        end
+        self.library = not self.library
+        self.page, self.selected = 1, 1
+        self:Refresh()
+    end
+
+    function picker:ChooseSelected()
+        local button = buttons[self.selected]
+        if button and button.value then Choose(button.value) end
+    end
+
+    for index = 1, pageSize do
+        local button = CreateFrame("Button", nil, picker)
+        button:SetSize(38, 38)
+        button:SetPoint("TOPLEFT", 23 + ((index - 1) % columns) * 44, -43 - math.floor((index - 1) / columns) * 42)
+        button.icon = button:CreateTexture(nil, "ARTWORK")
+        button.icon:SetAllPoints()
+        button.focus = AddAtlas(button, FOCUS_ATLAS, "OVERLAY")
+        button.focus:SetPoint("TOPLEFT", -2, 2)
+        button.focus:SetPoint("BOTTOMRIGHT", 2, -2)
+        button:SetHighlightAtlas(FOCUS_ATLAS)
+        button:SetScript("OnClick", function()
+            if button.value then Choose(button.value) end
+        end)
+        buttons[index] = button
+    end
+
+    local previous = CreateTextButton(picker, "<")
+    previous:SetSize(27, 24)
+    previous:SetPoint("BOTTOMLEFT", 23, 43)
+    previous:SetScript("OnClick", function() picker:ChangePage(-1) end)
+    local nextPage = CreateTextButton(picker, ">")
+    nextPage:SetSize(27, 24)
+    nextPage:SetPoint("BOTTOMLEFT", 56, 43)
+    nextPage:SetScript("OnClick", function() picker:ChangePage(1) end)
+    local default = CreateTextButton(picker, "Default")
+    default:SetSize(63, 24)
+    default:SetPoint("BOTTOMRIGHT", -23, 43)
+    default:SetScript("OnClick", function() Choose(dialog.defaultIcon) end)
+    local library = CreateTextButton(picker, "Library")
+    picker.libraryButton = library
+    library:SetSize(63, 24)
+    library:SetPoint("RIGHT", default, "LEFT", -6, 0)
+    library:SetScript("OnClick", function() picker:ToggleLibrary() end)
+
+    picker:SetScript("OnMouseWheel", function(_, delta) picker:ChangePage(delta > 0 and -1 or 1) end)
+    picker:SetScript("OnShow", function()
+        picker.page, picker.selected, picker.library = 1, 1, false
+        picker:Refresh()
+    end)
+    picker:SetScript("OnHide", function()
+        if picker.provider then
+            picker.provider:Release()
+            picker.provider = nil
+        end
+    end)
+    picker:Hide()
+    return picker
 end
 
 local function CreateCustomMessageDialog()
     local dialog = CreateFrame("Frame", "EmotePanelCustomMessageDialog", UIParent)
-    dialog:SetSize(320, 222)
+    dialog:SetSize(320, 278)
     dialog:SetPoint("CENTER", 0, 200)
     dialog:SetFrameStrata("DIALOG")
     dialog:SetFrameLevel(100)
@@ -477,7 +658,25 @@ local function CreateCustomMessageDialog()
     dialog:SetScript("OnHide", function()
         nameBox:ClearFocus()
         messageBox:ClearFocus()
+        if dialog.picker then dialog.picker:Hide() end
     end)
+
+    local iconButton = CreateTextButton(dialog, "Choose Icon")
+    iconButton:SetSize(142, 30)
+    iconButton:SetPoint("TOP", 20, -180)
+    local icon = dialog:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(30, 30)
+    icon:SetPoint("RIGHT", iconButton, "LEFT", -8, 0)
+    iconButton:SetScript("OnClick", function()
+        nameBox:ClearFocus()
+        messageBox:ClearFocus()
+        if not dialog.picker then dialog.picker = CreateIconPicker(dialog) end
+        dialog.picker:Show()
+    end)
+
+    local editHint = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    editHint:SetPoint("BOTTOM", 0, 52)
+    editHint:SetText("Y / Triangle: Choose Icon    A / Cross: Save")
 
     local saveButton = CreateTextButton(dialog, "Save")
     saveButton:SetSize(86, 28)
@@ -494,6 +693,8 @@ local function CreateCustomMessageDialog()
     dialog.messageBox = messageBox
     dialog.saveButton = saveButton
     dialog.resetButton = resetButton
+    dialog.iconButton = iconButton
+    dialog.icon = icon
     dialog:Hide()
 
     dialog:SetMovable(true)
@@ -566,6 +767,7 @@ function EmotePanel:Select(index)
     SetSelectionTint(self.highlight, color)
     SetSelectionTint(border, color)
     self.selectionName:SetText(GetEntryName(mode, slot, data))
+    self.messagePreview:SetText(GetEntryPreview(mode, slot, data):gsub("|", "||"))
     self:RefreshGamepadHint()
 end
 
@@ -575,21 +777,37 @@ function EmotePanel:EditButton(mode, index, data)
     end
 
     local dialog = self.customMessageDialog
-    dialog.nameBox:SetText(GetCustomButtonName(mode, index) or data.name)
-    dialog.messageBox:SetText(GetCustomMessage(mode, index) or data.action)
+    local editableText = data.actionType ~= "emote"
+    dialog:SetHeight(editableText and 278 or 165)
+    dialog.nameBox:SetShown(editableText)
+    dialog.nameBox.label:SetShown(editableText)
+    dialog.messageBox:SetShown(editableText)
+    dialog.messageBox.label:SetShown(editableText)
+    dialog.iconButton:SetPoint("TOP", 20, editableText and -180 or -60)
+    local previousName = GetEntryName(mode, index, data)
+    local previousMessage = GetCustomMessage(mode, index) or data.action
+    dialog.nameBox:SetText(previousName)
+    dialog.messageBox:SetText(previousMessage)
+    dialog.defaultIcon = GetIconPath(data.icon)
+    dialog.pendingIcon = GetEntryIcon(mode, index, data)
+    dialog.icon:SetTexture(dialog.pendingIcon)
     dialog.saveButton:SetScript("OnClick", function()
-        local name = dialog.nameBox:GetText()
-        local message = dialog.messageBox:GetText()
-        if name ~= "" and message ~= "" then
-            SaveCustomButtonName(mode, index, name)
-            SaveCustomMessage(mode, index, message)
-            self:RefreshWheel()
-
-            local helpPanel = _G[AddonName .. "HelpPanel"]
-            if helpPanel and helpPanel:IsVisible() then
-                helpPanel:refresh()
+        if editableText then
+            local name = dialog.nameBox:GetText()
+            local message = dialog.messageBox:GetText()
+            if name ~= "" and message ~= "" then
+                if name ~= previousName then
+                    SaveCustomButtonName(mode, index, name ~= data.name and name or nil)
+                end
+                if message ~= previousMessage then
+                    SaveCustomMessage(mode, index, message ~= data.action and message or nil)
+                end
             end
         end
+        SaveEntryIcon(mode, index, dialog.pendingIcon ~= dialog.defaultIcon and dialog.pendingIcon or nil)
+        self:RefreshWheel()
+        local helpPanel = _G[AddonName .. "HelpPanel"]
+        if helpPanel and helpPanel:IsVisible() then helpPanel:refresh() end
         dialog:Hide()
     end)
     dialog.resetButton:SetScript("OnClick", function()
@@ -609,9 +827,7 @@ function EmotePanel:ActivateSector(index, mouseButton)
     if mouseButton == "MiddleButton" then
         self:ToggleFavorite()
     elseif mouseButton == "RightButton" then
-        if data.actionType ~= "emote" then
-            self:EditButton(mode, slot, data)
-        end
+        self:EditButton(mode, slot, data)
     elseif mouseButton == "LeftButton" then
         ExecuteAction(mode, slot, data)
     end
@@ -692,11 +908,8 @@ function EmotePanel:CreateWheel()
         local mode, slot, data = GetSectorEntry(index)
         GameTooltip:SetOwner(wheel, "ANCHOR_CURSOR_RIGHT")
         GameTooltip:SetText(GetEntryName(mode, slot, data))
-        local action = GetCustomMessage(mode, slot) or data.action
-        GameTooltip:AddLine(action, 1, 1, 1, true)
-        if data.actionType ~= "emote" then
-            GameTooltip:AddLine("Right-click to edit", 0.7, 0.7, 0.7)
-        end
+        GameTooltip:AddLine(GetEntryPreview(mode, slot, data), 1, 1, 1, true)
+        GameTooltip:AddLine("Right-click to edit", 0.7, 0.7, 0.7)
         local favoriteHint = FindFavorite(mode, slot) and "Middle-click to remove favorite" or "Middle-click to favorite"
         GameTooltip:AddLine(favoriteHint, 0.7, 0.7, 0.7)
         GameTooltip:Show()
@@ -739,11 +952,11 @@ function EmotePanel:RefreshWheel(selection)
         local used = index <= currentPage.count
         if used then
             local mode, entryIndex, data = GetSectorEntry(index)
-            if data.icon:find("\\", 1, true) then
-                slot.icon:SetTexture(data.icon)
+            local icon = GetEntryIcon(mode, entryIndex, data)
+            slot.icon:SetTexture(icon)
+            if type(icon) == "string" and not icon:lower():find(ICON_PATH:lower(), 1, true) then
                 slot.icon:SetTexCoord(0, 1, 0, 1)
             else
-                slot.icon:SetTexture(ICON_PATH .. data.icon)
                 slot.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
             end
             slot.border:SetAtlas(ICON_BORDER)
@@ -760,6 +973,7 @@ function EmotePanel:RefreshWheel(selection)
     else
         self.highlight:Hide()
         self.selectionName:SetText("No favorites")
+        self.messagePreview:SetText("")
         self:RefreshGamepadHint()
     end
 end
@@ -813,7 +1027,7 @@ function EmotePanel:CreateControls()
 
     local footer = AddAtlas(frame, "gamepad-radial-menu-bottomtext", "BORDER")
     footer:SetSize(410, 102)
-    footer:SetPoint("BOTTOM", 0, 7)
+    footer:SetPoint("TOP", 0, -439)
 
     self.selectionName = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     self.selectionName:SetPoint("TOP", 0, -421)
@@ -824,6 +1038,13 @@ function EmotePanel:CreateControls()
     self.navigationHint:SetPoint("CENTER", footer, "CENTER", 0, 18.5)
     self.gamepadHint = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     self.gamepadHint:SetPoint("CENTER", footer, "CENTER", 0, -18.5)
+
+    self.messagePreview = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    self.messagePreview:SetPoint("TOP", footer, "BOTTOM", 0, -7)
+    self.messagePreview:SetWidth(386)
+    self.messagePreview:SetJustifyH("CENTER")
+    self.messagePreview:SetWordWrap(true)
+    self.messagePreview:SetNonSpaceWrap(true)
     frame:HookScript("OnShow", function() self:ShowPage(1, 1) end)
     if InputDeviceIconSetManager then
         InputDeviceIconSetManager:RegisterActiveInputDeviceIconSetUpdatedCallback(self.RefreshGamepadHint, self)
@@ -851,9 +1072,7 @@ function EmotePanel:RefreshGamepadHint()
         local favoriteAction = FindFavorite(mode, slot) and "Unfavorite" or "Favorite"
         actions = GamepadGlyph("PAD1", "A") .. " Use    "
             .. GamepadGlyph("PAD3", "X") .. " " .. favoriteAction .. "    "
-        if data.actionType ~= "emote" then
-            actions = actions .. GamepadGlyph("PAD4", "Y") .. " Edit    "
-        end
+        actions = actions .. GamepadGlyph("PAD4", "Y") .. " Edit    "
     else
         actions = "Browse pages and press " .. GamepadGlyph("PAD3", "X") .. " to add    "
     end
@@ -907,27 +1126,46 @@ function EmotePanel:SetupGamepad()
         PAD3 = function() self:ToggleFavorite() end,
         PAD4 = function() self:ActivateSector(self.selected, "RightButton") end,
     }
-    local function CanUsePanelControls(key)
-        if not self:CanUseWheel() then return false end
-        if key == "PAD4" then
-            local _, _, data = GetSectorEntry(self.selected)
-            return data and data.actionType ~= "emote"
+    local editorActions = {
+        PAD1 = function() self.customMessageDialog.saveButton:Click() end,
+        PAD2 = function() self.customMessageDialog:Hide() end,
+        PAD4 = function() self.customMessageDialog.iconButton:Click() end,
+    }
+    local pickerActions = {
+        PADDUP = function() self.customMessageDialog.picker:MoveSelection(-8) end,
+        PADDDOWN = function() self.customMessageDialog.picker:MoveSelection(8) end,
+        PADDLEFT = function() self.customMessageDialog.picker:MoveSelection(-1) end,
+        PADDRIGHT = function() self.customMessageDialog.picker:MoveSelection(1) end,
+        PADLSHOULDER = function() self.customMessageDialog.picker:ChangePage(-1) end,
+        PADRSHOULDER = function() self.customMessageDialog.picker:ChangePage(1) end,
+        PAD1 = function() self.customMessageDialog.picker:ChooseSelected() end,
+        PAD2 = function() self.customMessageDialog.picker:Hide() end,
+        PAD4 = function() self.customMessageDialog.picker:ToggleLibrary() end,
+    }
+    local function GetAction(key)
+        if StaticPopup_Visible("EMOTEPANEL_RESET_BUTTON") or StaticPopup_Visible("EMOTEPANEL_RESET_ALL") then return end
+        local dialog = self.customMessageDialog
+        if dialog and dialog:IsShown() then
+            if dialog.picker and dialog.picker:IsShown() then return pickerActions[key] end
+            if not dialog.nameBox:HasFocus() and not dialog.messageBox:HasFocus() then return editorActions[key] end
+            return
         end
-        return true
+        if key ~= "PAD4" or self.selected then return actions[key] end
     end
     frame:SetScript("OnGamePadButtonDown", function(_, key)
-        if not actions[key] or IsModifierKeyDown() or not CanUsePanelControls(key) then
-            return true
-        end
-        pressed[key] = true
+        if IsModifierKeyDown() then return true end
+        local action = GetAction(key)
+        if not action then return true end
+        pressed[key] = action
         return false
     end)
     frame:SetScript("OnGamePadButtonUp", function(_, key)
-        if not pressed[key] then return true end
+        local action = pressed[key]
+        if not action then return true end
         pressed[key] = nil
-        if CanUsePanelControls(key) then
+        if action == GetAction(key) then
             if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
-            actions[key]()
+            action()
         end
         return false
     end)
@@ -983,6 +1221,7 @@ end
 
 function EmotePanel:Initialize()
     EmotePanelSavedVars = EmotePanelSavedVars or {}
+    EmotePanelSavedVars.customIcons = EmotePanelSavedVars.customIcons or {}
     LoadFavorites()
     currentPageIndex = 1
     currentPage = GetPage(1)
@@ -1060,18 +1299,18 @@ local function CreateCustomizationPanel(mainPanel)
     -- Add instructions
     local instructions1 = customizationPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     instructions1:SetPoint("TOPLEFT", customTitle, "BOTTOMLEFT", 0, -8)
-    instructions1:SetText("Right-click a Say, Party, or Command sector, or select it and press Y/Triangle to edit.")
+    instructions1:SetText("Right-click any sector or press Y/Triangle to edit its icon.")
 
     local instructions2 = customizationPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     instructions2:SetPoint("TOPLEFT", instructions1, "BOTTOMLEFT", 0, -8)
-    instructions2:SetText("Use the button below to reset all custom messages.")
+    instructions2:SetText("Say, Party, and Command entries also support custom names and text.")
 
     local instructions3 = customizationPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     instructions3:SetPoint("TOPLEFT", instructions2, "BOTTOMLEFT", 0, -8)
     instructions3:SetText("Selecting a command submits it immediately through WoW chat.")
 
-    -- Add button to reset all custom messages
-    local resetCustomButton = CreateTextButton(customizationPanel, "Reset All Custom Messages")
+    -- Add button to reset all custom entries.
+    local resetCustomButton = CreateTextButton(customizationPanel, "Reset All Custom Entries")
     resetCustomButton:SetSize(200, 26)
     resetCustomButton:SetPoint("TOPLEFT", instructions3, "BOTTOMLEFT", 0, -10)
 
@@ -1128,10 +1367,10 @@ local function ShowHelp()
     print("  /ep - Toggle EmotePanel")
     print("  /ep help - Show this help message")
     print("  Right stick or D-pad up/down: select. D-pad left/right: change page.")
-    print("  A/Cross: use. B/Circle: close. Y/Triangle or right-click: edit a Say, Party, or Command sector.")
+    print("  A/Cross: use. B/Circle: close. Y/Triangle or right-click: edit any sector.")
     print("  X/Square or middle-click: add or remove a favorite. The wheel opens on Favorites.")
     print("  /ep config - Open settings panel")
-    print("  /ep reset - Reset all custom messages")
+    print("  /ep reset - Reset all custom entries")
     print("  /ep list - Show emote list panel")
 end
 
