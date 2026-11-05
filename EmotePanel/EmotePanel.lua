@@ -9,9 +9,13 @@ _G[AddonName] = EmotePanel
 
 local PANEL_WIDTH, PANEL_HEIGHT = 432, 524
 local WHEEL_SIZE = 382
-local LABEL_RADIUS = 136
-local FULL_TURN = 2 * math.pi
-local MEDIA = "Interface\\AddOns\\EmotePanel\\Media\\"
+local SECTOR_COUNT = 8
+local SECTOR_ANGLE = 2 * math.pi / SECTOR_COUNT
+local WHEEL_ATLAS = "gamepad-radial-menu-wheelbg"
+local SELECTION_ATLAS = "gamepad-radial-menu-selected"
+local PANEL_ATLAS = "gamepad-footer-slot-bg"
+local PANEL_BORDER_ATLAS = "gamepad-footer-slot-frameneutral"
+local FOCUS_ATLAS = "gamepad-footer-slot-framefocused"
 
 -- Default positions for the panels
 local DEFAULT_POSITIONS = {
@@ -67,7 +71,7 @@ end
 
 local PANEL_MODES = {
     emotes = {
-        title = "Emotes 1",
+        title = "Emotes",
         list = {
             { name = "Angry",    action = "angry",    actionType = "emote" },
             { name = "Applause", action = "bravo",    actionType = "emote" },
@@ -79,11 +83,6 @@ local PANEL_MODES = {
             { name = "Dance",    action = "dance",    actionType = "emote" },
             { name = "Facepalm", action = "facepalm", actionType = "emote" },
             { name = "Flex",     action = "flex",     actionType = "emote" },
-        }
-    },
-    emotes2 = {
-        title = "Emotes 2",
-        list = {
             { name = "Golfclap", action = "golfclap", actionType = "emote" },
             { name = "Goodbye",  action = "bye",      actionType = "emote" },
             { name = "Hug",      action = "hug",      actionType = "emote" },
@@ -94,11 +93,6 @@ local PANEL_MODES = {
             { name = "Point",    action = "point",    actionType = "emote" },
             { name = "Roar",     action = "roar",     actionType = "emote" },
             { name = "Rude",     action = "rude",     actionType = "emote" },
-        }
-    },
-    emotes3 = {
-        title = "Emotes 3",
-        list = {
             { name = "Salute",   action = "salute",    actionType = "emote" },
             { name = "Sigh",     action = "sigh",      actionType = "emote" },
             { name = "Sorry",    action = "apologize", actionType = "emote" },
@@ -157,9 +151,29 @@ local PANEL_MODES = {
     }
 }
 
-local modeOrder = { "emotes", "emotes2", "emotes3", "chat", "party", "commands" }
-local currentModeIndex = 1
-local currentMode = modeOrder[currentModeIndex]
+local modeOrder = { "emotes", "chat", "party", "commands" }
+local pages = {}
+for _, mode in ipairs(modeOrder) do
+    local config = PANEL_MODES[mode]
+    local pageCount = math.ceil(#config.list / SECTOR_COUNT)
+    for first = 1, #config.list, SECTOR_COUNT do
+        local number = math.floor((first - 1) / SECTOR_COUNT) + 1
+        table.insert(pages, {
+            mode = mode,
+            first = first,
+            count = math.min(SECTOR_COUNT, #config.list - first + 1),
+            title = ("%s  %d / %d"):format(config.title, number, pageCount),
+        })
+    end
+end
+local currentPageIndex = 1
+local currentPage = pages[currentPageIndex]
+
+local function GetSectorEntry(sector)
+    local mode = currentPage.mode
+    local index = currentPage.first + sector - 1
+    return mode, index, PANEL_MODES[mode].list[index]
+end
 
 local function ExecuteAction(mode, index, data)
     if data.actionType == "emote" then
@@ -265,79 +279,96 @@ StaticPopupDialogs["EMOTEPANEL_RESET_ALL"] = {
     hideOnEscape = true,
     preferredIndex = 3,
 }
-local function SetUpDialogHeader(frame)
-    frame.Title:ClearAllPoints()
-    frame.Title:SetPoint("CENTER", frame, "TOP", 0, -16)
+local function AddAtlas(parent, atlas, layer)
+    local texture = parent:CreateTexture(nil, layer or "BACKGROUND")
+    texture:SetAtlas(atlas)
+    return texture
+end
 
-    local closeButton = _G[frame:GetName() .. "Close"]
-    closeButton:ClearAllPoints()
-    closeButton:SetPoint("RIGHT", frame, "TOPRIGHT", -6, -16)
+local function SkinPanel(frame)
+    AddAtlas(frame, PANEL_ATLAS):SetAllPoints()
+    AddAtlas(frame, PANEL_BORDER_ATLAS, "BORDER"):SetAllPoints()
+end
+
+local function CreateTextButton(parent, text)
+    local button = CreateFrame("Button", nil, parent)
+    local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    label:SetPoint("CENTER")
+    button:SetFontString(label)
+    button:SetNormalFontObject(GameFontHighlight)
+    button:SetHighlightFontObject(GameFontHighlight)
+    button:SetText(text)
+    button:SetNormalAtlas(PANEL_ATLAS)
+    AddAtlas(button, PANEL_BORDER_ATLAS, "BORDER"):SetAllPoints()
+    button:SetHighlightAtlas(FOCUS_ATLAS)
+    return button
+end
+
+local function CreateCloseButton(frame)
+    local close = CreateFrame("Button", nil, frame)
+    close:SetSize(30, 30)
+    close:SetPoint("TOPRIGHT", -10, -10)
+    close:SetNormalAtlas("128-redbutton-exit")
+    close:SetPushedAtlas("128-redbutton-exit-Pressed")
+    close:SetHighlightAtlas("128-redbutton-exit-Highlight")
+    close:SetScript("OnClick", function() frame:Hide() end)
+end
+
+local function CreateEditorField(dialog, labelText, y, maxLetters)
+    local label = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    label:SetPoint("TOPLEFT", 22, y)
+    label:SetText(labelText)
+
+    local box = CreateFrame("EditBox", nil, dialog, "InputBoxScriptTemplate")
+    box:SetSize(276, 30)
+    box:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -5)
+    box:SetFontObject(GameFontHighlight)
+    box:SetTextInsets(10, 10, 0, 0)
+    box:SetAutoFocus(false)
+    box:SetMaxLetters(maxLetters)
+    SkinPanel(box)
+
+    local focus = AddAtlas(box, FOCUS_ATLAS, "BORDER")
+    focus:SetAllPoints()
+    focus:Hide()
+    box:HookScript("OnEditFocusGained", function() focus:Show() end)
+    box:HookScript("OnEditFocusLost", function() focus:Hide() end)
+    return box
 end
 
 local function CreateCustomMessageDialog()
-    local dialog = CreateFrame("Frame", "EmotePanelCustomMessageDialog", UIParent, "UIPanelDialogTemplate")
-    dialog:SetSize(280, 200)
+    local dialog = CreateFrame("Frame", "EmotePanelCustomMessageDialog", UIParent)
+    dialog:SetSize(320, 222)
     dialog:SetPoint("CENTER", 0, 200)
     dialog:SetFrameStrata("DIALOG")
     dialog:SetFrameLevel(100)
     dialog:EnableMouse(true)
+    SkinPanel(dialog)
+    CreateCloseButton(dialog)
 
-    SetUpDialogHeader(dialog)
-    dialog.Title:SetText("Customize Button")
+    local title = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+    title:SetPoint("TOP", 0, -18)
+    title:SetText("Customize Entry")
 
-    -- Name Label
-    local nameLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    nameLabel:SetPoint("TOP", 0, -40)
-    nameLabel:SetText("Button Name:")
-
-    -- Name EditBox
-    local nameBox = CreateFrame("EditBox", nil, dialog, "InputBoxTemplate")
-    nameBox:SetSize(230, 22)
-    nameBox:SetPoint("TOP", 2.5, -60)
-    nameBox:SetAutoFocus(false)
-    nameBox:SetMaxLetters(18)
-
-    -- Message Label
-    local messageLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    messageLabel:SetPoint("TOP", 0, -90)
-    messageLabel:SetText("Message:")
-
-    -- Message EditBox
-    local messageBox = CreateFrame("EditBox", nil, dialog, "InputBoxTemplate")
-    messageBox:SetSize(230, 22)
-    messageBox:SetPoint("TOP", 2.5, -110)
-    messageBox:SetAutoFocus(false)
-    messageBox:SetMaxLetters(255)
-
-    -- Save Button
-    local saveButton = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
-    saveButton:SetSize(80, 22)
-    saveButton:SetPoint("BOTTOMLEFT", 20, 20)
-    saveButton:SetText("Save")
-
-    -- Reset Button
-    local resetButton = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
-    resetButton:SetSize(80, 22)
-    resetButton:SetPoint("BOTTOM", 0, 20)
-    resetButton:SetText("Reset")
-
-    -- Cancel Button
-    local cancelButton = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
-    cancelButton:SetSize(80, 22)
-    cancelButton:SetPoint("BOTTOMRIGHT", -20, 20)
-    cancelButton:SetText("Cancel")
-
-    cancelButton:SetScript("OnClick", function()
-        dialog:Hide()
+    local nameBox = CreateEditorField(dialog, "Name", -51, 18)
+    local messageBox = CreateEditorField(dialog, "Message or command", -114, 255)
+    nameBox:SetScript("OnTabPressed", function() messageBox:SetFocus() end)
+    messageBox:SetScript("OnTabPressed", function() nameBox:SetFocus() end)
+    dialog:SetScript("OnHide", function()
+        nameBox:ClearFocus()
+        messageBox:ClearFocus()
     end)
 
-    -- Tab between fields
-    nameBox:SetScript("OnTabPressed", function()
-        messageBox:SetFocus()
-    end)
-    messageBox:SetScript("OnTabPressed", function()
-        nameBox:SetFocus()
-    end)
+    local saveButton = CreateTextButton(dialog, "Save")
+    saveButton:SetSize(86, 28)
+    saveButton:SetPoint("BOTTOMLEFT", 22, 16)
+    local resetButton = CreateTextButton(dialog, "Reset")
+    resetButton:SetSize(86, 28)
+    resetButton:SetPoint("BOTTOM", 0, 16)
+    local cancelButton = CreateTextButton(dialog, "Cancel")
+    cancelButton:SetSize(86, 28)
+    cancelButton:SetPoint("BOTTOMRIGHT", -22, 16)
+    cancelButton:SetScript("OnClick", function() dialog:Hide() end)
 
     dialog.nameBox = nameBox
     dialog.messageBox = messageBox
@@ -345,22 +376,18 @@ local function CreateCustomMessageDialog()
     dialog.resetButton = resetButton
     dialog:Hide()
 
-
     dialog:SetMovable(true)
     dialog:SetUserPlaced(true)
     dialog:SetClampedToScreen(true)
-    dialog:EnableMouse(true)
     dialog:RegisterForDrag("LeftButton")
     dialog:SetScript("OnDragStart", dialog.StartMoving)
-    dialog:SetScript("OnDragStop", function()
-        dialog:StopMovingOrSizing()
-    end)
-
+    dialog:SetScript("OnDragStop", dialog.StopMovingOrSizing)
     return dialog
 end
+
 -- EmotePanel Methods
 function EmotePanel:CreateMainFrame()
-    self.frame = CreateFrame("Frame", AddonName .. "Frame", UIParent, "BackdropTemplate")
+    self.frame = CreateFrame("Frame", AddonName .. "Frame", UIParent)
     local frame = self.frame
 
     frame:SetWidth(PANEL_WIDTH)
@@ -371,13 +398,7 @@ function EmotePanel:CreateMainFrame()
     frame:SetClampedToScreen(true)
     frame:EnableMouse(true)
 
-    frame:SetBackdrop({
-        bgFile = "Interface\\Buttons\\WHITE8X8",
-        edgeFile = "Interface\\Buttons\\WHITE8X8",
-        edgeSize = 1,
-    })
-    frame:SetBackdropColor(0.035, 0.063, 0.088, 0.97)
-    frame:SetBackdropBorderColor(0.23, 0.34, 0.40, 1)
+    SkinPanel(frame)
 
     -- Drag the panel by its header or margins.
     frame:RegisterForDrag("LeftButton")
@@ -391,9 +412,9 @@ function EmotePanel:CreateMainFrame()
 end
 
 -- Sectors start at twelve o'clock and advance clockwise.
-local function SectorAt(x, y, count)
-    local step = FULL_TURN / count
-    return math.floor(math.atan2(x, y) / step + 0.5) % count + 1
+local function SectorAt(x, y)
+    local index = math.floor(math.atan2(x, y) / SECTOR_ANGLE + 0.5) % SECTOR_COUNT + 1
+    if index <= currentPage.count then return index end
 end
 
 local function GetEntryName(mode, index, data)
@@ -404,18 +425,22 @@ local function GetEntryName(mode, index, data)
 end
 
 function EmotePanel:Select(index)
-    local list = PANEL_MODES[currentMode].list
-    index = (index - 1) % #list + 1
+    index = (index - 1) % currentPage.count + 1
     if index == self.selected then return end
 
     if self.selected then
-        self.labels[self.selected]:SetTextColor(0.86, 0.91, 0.94)
+        self.labels[self.selected]:SetTextColor(0.9, 0.86, 0.79)
     end
     self.selected = index
     self.labels[index]:SetTextColor(1, 1, 1)
-    self.highlight:SetRotation(-(index - 1) * FULL_TURN / #list)
-    self.selectionName:SetText(GetEntryName(currentMode, index, list[index]))
-    self.selectionIndex:SetFormattedText("%02d / %02d", index, #list)
+    local angle = (index - 1) * SECTOR_ANGLE
+    local radius = self.highlightRadius
+    self.highlight:SetPoint("CENTER", self.wheel, "CENTER", math.sin(angle) * radius, math.cos(angle) * radius)
+    -- Blizzard's highlight atlas points down before rotation.
+    self.highlight:SetRotation(math.pi - angle)
+    local mode, slot, data = GetSectorEntry(index)
+    self.selectionName:SetText(GetEntryName(mode, slot, data))
+    self.selectionIndex:SetFormattedText("%02d / %02d", index, currentPage.count)
 end
 
 function EmotePanel:EditButton(mode, index, data)
@@ -452,15 +477,14 @@ function EmotePanel:EditButton(mode, index, data)
 end
 
 function EmotePanel:ActivateSector(index, mouseButton)
-    local list = PANEL_MODES[currentMode].list
-    local data = list[index]
+    local mode, slot, data = GetSectorEntry(index)
     self:Select(index)
     if mouseButton == "RightButton" then
         if data.actionType ~= "emote" then
-            self:EditButton(currentMode, index, data)
+            self:EditButton(mode, slot, data)
         end
     elseif mouseButton == "LeftButton" then
-        ExecuteAction(currentMode, index, data)
+        ExecuteAction(mode, slot, data)
     end
 end
 
@@ -476,17 +500,19 @@ function EmotePanel:CreateWheel()
     wheel:EnableMouse(true)
     self.wheel = wheel
 
-    self.wheelArt = wheel:CreateTexture(nil, "BACKGROUND")
+    self.wheelArt = AddAtlas(wheel, WHEEL_ATLAS)
     self.wheelArt:SetAllPoints()
-    self.highlight = wheel:CreateTexture(nil, "ARTWORK")
-    self.highlight:SetAllPoints()
+    self.highlight = AddAtlas(wheel, SELECTION_ATLAS, "ARTWORK")
+
+    local wheelInfo = C_Texture.GetAtlasInfo(WHEEL_ATLAS) or { width = 525 }
+    local highlightInfo = C_Texture.GetAtlasInfo(SELECTION_ATLAS) or { width = 177, height = 168 }
+    local scale = WHEEL_SIZE / wheelInfo.width
+    self.highlight:SetSize(highlightInfo.width * scale, highlightInfo.height * scale)
+    self.highlightRadius = 150 * scale
+    local innerRadius, outerRadius = 75 * scale, 234 * scale
 
     self.labels = {}
-    local maxEntries = 0
-    for _, mode in ipairs(modeOrder) do
-        maxEntries = math.max(maxEntries, #PANEL_MODES[mode].list)
-    end
-    for index = 1, maxEntries do
+    for index = 1, SECTOR_COUNT do
         local label = wheel:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
         label:SetWidth(99)
         label:SetJustifyH("CENTER")
@@ -495,27 +521,27 @@ function EmotePanel:CreateWheel()
     end
 
     local selectionCaption = wheel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    selectionCaption:SetPoint("CENTER", 0, 35)
-    selectionCaption:SetTextColor(0.48, 0.79, 0.79)
+    selectionCaption:SetPoint("CENTER", 0, 31)
+    selectionCaption:SetTextColor(0.91, 0.76, 0.49)
     selectionCaption:SetText("SELECTED")
 
     self.selectionName = wheel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     self.selectionName:SetPoint("CENTER")
-    self.selectionName:SetWidth(126)
+    self.selectionName:SetWidth(96)
     self.selectionName:SetMaxLines(2)
-    self.selectionName:SetTextColor(0.96, 0.99, 1)
+    self.selectionName:SetTextColor(1, 0.96, 0.87)
 
     self.selectionIndex = wheel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    self.selectionIndex:SetPoint("CENTER", 0, -35)
-    self.selectionIndex:SetTextColor(0.64, 0.76, 0.83)
+    self.selectionIndex:SetPoint("CENTER", 0, -31)
+    self.selectionIndex:SetTextColor(0.74, 0.65, 0.51)
 
     local function SectorUnderCursor(cursorX, cursorY)
         local centerX, centerY = wheel:GetCenter()
         local scale = wheel:GetEffectiveScale()
         local x, y = cursorX / scale - centerX, cursorY / scale - centerY
         local distanceSquared = x * x + y * y
-        if distanceSquared >= 77 * 77 and distanceSquared <= 185 * 185 then
-            return SectorAt(x, y, #PANEL_MODES[currentMode].list)
+        if distanceSquared >= innerRadius ^ 2 and distanceSquared <= outerRadius ^ 2 then
+            return SectorAt(x, y)
         end
     end
 
@@ -533,10 +559,10 @@ function EmotePanel:CreateWheel()
         end
         if index == self.selected and GameTooltip:IsShown() and GameTooltip:IsOwned(wheel) then return end
         self:Select(index)
-        local data = PANEL_MODES[currentMode].list[index]
+        local mode, slot, data = GetSectorEntry(index)
         GameTooltip:SetOwner(wheel, "ANCHOR_CURSOR_RIGHT")
-        GameTooltip:SetText(GetEntryName(currentMode, index, data))
-        local action = GetCustomMessage(currentMode, index) or data.action
+        GameTooltip:SetText(GetEntryName(mode, slot, data))
+        local action = GetCustomMessage(mode, slot) or data.action
         GameTooltip:AddLine(action, 1, 1, 1, true)
         if data.actionType ~= "emote" then
             GameTooltip:AddLine("Right-click to edit", 0.7, 0.7, 0.7)
@@ -575,73 +601,63 @@ function EmotePanel:CreateWheel()
 end
 
 function EmotePanel:RefreshWheel(selection)
-    local list = PANEL_MODES[currentMode].list
-    local count = #list
-    self.wheelArt:SetTexture(MEDIA .. "Wheel" .. count .. ".tga")
-    self.highlight:SetTexture(MEDIA .. "Selection" .. count .. ".tga")
     for index, label in ipairs(self.labels) do
-        local data = list[index]
-        if data then
-            local angle = (index - 1) * FULL_TURN / count
-            label:ClearAllPoints()
-            label:SetPoint("CENTER", self.wheel, "CENTER", math.sin(angle) * LABEL_RADIUS, math.cos(angle) * LABEL_RADIUS)
-            local name = GetEntryName(currentMode, index, data)
-            local customMessage = data.actionType ~= "emote" and GetCustomMessage(currentMode, index)
+        local used = index <= currentPage.count
+        if used then
+            local mode, slot, data = GetSectorEntry(index)
+            local angle = (index - 1) * SECTOR_ANGLE
+            local radius = self.highlightRadius
+            label:SetPoint("CENTER", self.wheel, "CENTER", math.sin(angle) * radius, math.cos(angle) * radius)
+            local name = GetEntryName(mode, slot, data)
+            local customMessage = data.actionType ~= "emote" and GetCustomMessage(mode, slot)
             label:SetText(name .. (customMessage and "*" or ""))
-            label:SetTextColor(0.86, 0.91, 0.94)
+            label:SetTextColor(0.9, 0.86, 0.79)
         end
-        label:SetShown(data ~= nil)
+        label:SetShown(used)
     end
     local nextSelection = selection or self.selected or 1
     self.selected = nil
     self:Select(nextSelection)
 end
 
-local function CreateTextButton(parent, text)
-    local button = CreateFrame("Button", nil, parent)
-    button:SetSize(32, 28)
-    local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
-    label:SetPoint("CENTER")
-    button:SetFontString(label)
-    button:SetNormalFontObject(GameFontHighlightLarge)
-    button:SetHighlightFontObject(GameFontNormalLarge)
-    button:SetText(text)
-    return button
-end
-
 function EmotePanel:CreateControls()
     local frame = self.frame
+    local header = AddAtlas(frame, "gamepad-radial-menu-toptext", "BORDER")
+    header:SetSize(374, 58)
+    header:SetPoint("TOP", 0, -2)
     local caption = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     caption:SetPoint("TOP", 0, -10)
-    caption:SetTextColor(0.48, 0.79, 0.79)
+    caption:SetTextColor(0.91, 0.76, 0.49)
     caption:SetText("EMOTE WHEEL")
 
     self.titleText = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     self.titleText:SetPoint("TOP", 0, -26)
-    self.titleText:SetTextColor(0.96, 0.99, 1)
-    self.titleText:SetText(PANEL_MODES[currentMode].title)
+    self.titleText:SetTextColor(1, 0.96, 0.87)
+    self.titleText:SetText(currentPage.title)
 
     for direction = -1, 1, 2 do
-        local arrow = CreateTextButton(frame, direction < 0 and "<" or ">")
-        arrow:SetPoint("TOP", direction * 92, -19)
+        local arrow = CreateFrame("Button", nil, frame)
+        local atlas = direction < 0 and "common-icon-backarrow" or "common-icon-forwardarrow"
+        arrow:SetSize(14, 22)
+        arrow:SetPoint("TOP", direction * 118, -21)
+        arrow:SetNormalAtlas(atlas)
+        arrow:SetHighlightAtlas(atlas, "ADD")
         arrow:SetScript("OnClick", function() self:CycleMode(direction) end)
     end
 
-    local close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -10, -10)
+    CreateCloseButton(frame)
 
     local help = CreateTextButton(frame, "?")
-    help:SetPoint("TOPLEFT", 8, -8)
+    help:SetSize(28, 28)
+    help:SetPoint("TOPLEFT", 11, -11)
     help:SetScript("OnClick", function()
         frame:Hide()
         Settings.OpenToCategory(self.settingsCategoryID)
     end)
 
-    local divider = frame:CreateTexture(nil, "ARTWORK")
-    divider:SetPoint("TOPLEFT", 22, -442)
-    divider:SetPoint("TOPRIGHT", -22, -442)
-    divider:SetHeight(1)
-    divider:SetColorTexture(0.23, 0.34, 0.40, 1)
+    local footer = AddAtlas(frame, "gamepad-radial-menu-bottomtext", "BORDER")
+    footer:SetSize(410, 78)
+    footer:SetPoint("BOTTOM", 0, 7)
 
     self.navigationHint = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     self.navigationHint:SetPoint("TOP", 0, -446)
@@ -669,16 +685,16 @@ function EmotePanel:RefreshGamepadHint()
         .. GamepadGlyph("DIRPADVERTICAL", "Up/Down") .. " Select       "
         .. GamepadGlyph("DIRPADHORIZONTAL", "Left/Right") .. " Page")
     local actions = GamepadGlyph("PAD1", "A") .. " Use       "
-    if PANEL_MODES[currentMode].list[1].actionType ~= "emote" then
+    if currentPage.mode ~= "emotes" then
         actions = actions .. GamepadGlyph("PAD4", "Y") .. " Edit       "
     end
     self.gamepadHint:SetText(actions .. GamepadGlyph("PAD2", "B") .. " Close")
 end
 
 function EmotePanel:CycleMode(direction)
-    currentModeIndex = (currentModeIndex - 1 + direction) % #modeOrder + 1
-    currentMode = modeOrder[currentModeIndex]
-    self.titleText:SetText(PANEL_MODES[currentMode].title)
+    currentPageIndex = (currentPageIndex - 1 + direction) % #pages + 1
+    currentPage = pages[currentPageIndex]
+    self.titleText:SetText(currentPage.title)
     GameTooltip:Hide()
     self:RefreshWheel(1)
     self:RefreshGamepadHint()
@@ -697,8 +713,7 @@ function EmotePanel:SetupGamepad()
         PAD4 = function() self:ActivateSector(self.selected, "RightButton") end,
     }
     local function CanUsePanelControls(key)
-        local data = PANEL_MODES[currentMode].list[self.selected]
-        return (key ~= "PAD4" or data.actionType ~= "emote") and self:CanUseWheel()
+        return (key ~= "PAD4" or currentPage.mode ~= "emotes") and self:CanUseWheel()
     end
     frame:SetScript("OnGamePadButtonDown", function(_, key)
         if not actions[key] or IsModifierKeyDown() or not CanUsePanelControls(key) then
@@ -722,7 +737,8 @@ function EmotePanel:SetupGamepad()
         end
         if x * x + y * y >= 0.25 then
             if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
-            self:Select(SectorAt(x, y, #PANEL_MODES[currentMode].list))
+            local index = SectorAt(x, y)
+            if index then self:Select(index) end
         end
         return false
     end)
@@ -792,7 +808,7 @@ local function CreateHelpPanel(mainPanel)
 
     -- Create and store scroll frame reference both locally and globally
     local scrollFrame = CreateFrame("ScrollFrame", AddonName .. "ListScrollFrame", helpPanel,
-        "UIPanelScrollFrameTemplate")
+        "MinimalScrollFrameTemplate")
     scrollFrame:SetPoint("TOPLEFT", helpTitle, "BOTTOMLEFT", 0, -20)
     scrollFrame:SetPoint("BOTTOMRIGHT", helpPanel, "BOTTOMRIGHT", -30, 20)
 
@@ -852,9 +868,8 @@ local function CreateCustomizationPanel(mainPanel)
     instructions3:SetText("Commands open in chat. Confirm them there to run them.")
 
     -- Add button to reset all custom messages
-    local resetCustomButton = CreateFrame("Button", nil, customizationPanel, "UIPanelButtonTemplate")
+    local resetCustomButton = CreateTextButton(customizationPanel, "Reset All Custom Messages")
     resetCustomButton:SetSize(200, 26)
-    resetCustomButton:SetText("Reset All Custom Messages")
     resetCustomButton:SetPoint("TOPLEFT", instructions3, "BOTTOMLEFT", 0, -10)
 
     -- Click handlers
@@ -935,7 +950,7 @@ local function HandleSlashCommand(msg)
         EmotePanel.frame:Hide()
         Settings.OpenToCategory(EmotePanel.settingsCategoryID)
     elseif command == "scroll" then
-        print("EmotePanel: All entries are visible on the wheel.")
+        print("EmotePanel: Use the page arrows or D-pad left/right to browse the wheel.")
     elseif command == "reset" then
         StaticPopup_Show("EMOTEPANEL_RESET_ALL")
     else
