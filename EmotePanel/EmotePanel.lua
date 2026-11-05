@@ -1110,7 +1110,8 @@ function EmotePanel:RefreshGamepadHint()
     self.navigationHint:SetText(GamepadGlyph("PADLSTICKAXIS", "Left stick") .. " / "
         .. GamepadGlyph("PADRSTICKAXIS", "Right stick") .. " "
         .. GamepadGlyph("DIRPADVERTICAL", "Up/Down") .. " Select       "
-        .. GamepadGlyph("DIRPADHORIZONTAL", "Left/Right") .. " Page")
+        .. GamepadGlyph("DIRPADHORIZONTAL", "Left/Right") .. " / "
+        .. GamepadGlyph("PADLSHOULDER", "LB") .. " " .. GamepadGlyph("PADRSHOULDER", "RB") .. " Page")
     local mode, slot, data = GetSectorEntry(self.selected)
     local actions
     if data then
@@ -1170,11 +1171,15 @@ function EmotePanel:SetupGamepad()
     local frame = self.frame
     local pressed = {}
     local function CloseForGameMenu() self:CloseForGameMenu() end
+    local function PreviousPage() self:CycleMode(-1) end
+    local function NextPage() self:CycleMode(1) end
     local actions = {
         PADDUP = function() if self.selected then self:Select(self.selected - 1) end end,
         PADDDOWN = function() if self.selected then self:Select(self.selected + 1) end end,
-        PADDLEFT = function() self:CycleMode(-1) end,
-        PADDRIGHT = function() self:CycleMode(1) end,
+        PADDLEFT = PreviousPage,
+        PADDRIGHT = NextPage,
+        PADLSHOULDER = PreviousPage,
+        PADRSHOULDER = NextPage,
         PAD1 = function() self:ActivateSector(self.selected, "LeftButton") end,
         PAD2 = function() frame:Hide() end,
         PAD3 = function() self:ToggleFavorite() end,
@@ -1430,7 +1435,7 @@ local function ShowHelp()
     print("|cFF00FF00EmotePanel Commands:|r")
     print("  /ep - Toggle EmotePanel")
     print("  /ep help - Show this help message")
-    print("  Either stick or D-pad up/down: select. D-pad left/right: change page.")
+    print("  Either stick or D-pad up/down: select. LB/RB or D-pad left/right: change page.")
     print("  A/Cross: use. B/Circle: close. Y/Triangle or right-click: edit any sector.")
     print("  X/Square or middle-click: add or remove a favorite. The wheel opens on Favorites.")
     print("  /ep config - Open settings panel")
@@ -1457,7 +1462,7 @@ local function HandleSlashCommand(msg)
         EmotePanel.frame:Hide()
         Settings.OpenToCategory(EmotePanel.settingsCategoryID)
     elseif command == "scroll" then
-        print("EmotePanel: Use the page arrows or D-pad left/right to browse the wheel.")
+        print("EmotePanel: Use LB/RB, D-pad left/right, or the page arrows to browse the wheel.")
     elseif command == "reset" then
         StaticPopup_Show("EMOTEPANEL_RESET_ALL")
     else
