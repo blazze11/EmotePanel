@@ -229,14 +229,18 @@ local function ExecuteAction(mode, index, data)
         local token = hash_EmoteTokenList and hash_EmoteTokenList[alias] or data.action:upper()
         C_ChatInfo.PerformEmote(token)
     elseif data.actionType == "command" then
-        local editBox = ChatFrameUtil.GetActiveWindow()
-        if editBox and editBox:HasFocus() then
-            print("EmotePanel: Finish your current chat draft before opening a command.")
+        local activeBox = ChatFrameUtil.GetActiveWindow()
+        local editBox = ChatFrameUtil.ChooseBoxForSend()
+        if not editBox then return end
+        local draft = editBox:GetText()
+        if (activeBox and activeBox:HasFocus()) or issecretvalue(draft) or draft ~= "" then
+            print("EmotePanel: Finish your current chat draft before using a command.")
             return
         end
         local command = GetCustomMessage(mode, index) or data.action
         EmotePanel.frame:Hide()
-        ChatFrameUtil.OpenChat("/" .. command:gsub("^/+", ""))
+        editBox:SetText("/" .. command:gsub("^/+", ""))
+        editBox:SendMessage()
     else
         local message = GetCustomMessage(mode, index) or data.action
         local channel = data.actionType == "say" and "SAY" or "PARTY"
@@ -978,7 +982,7 @@ local function CreateCustomizationPanel(mainPanel)
 
     local instructions3 = customizationPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     instructions3:SetPoint("TOPLEFT", instructions2, "BOTTOMLEFT", 0, -8)
-    instructions3:SetText("Commands open in chat. Confirm them there to run them.")
+    instructions3:SetText("Selecting a command submits it immediately through WoW chat.")
 
     -- Add button to reset all custom messages
     local resetCustomButton = CreateTextButton(customizationPanel, "Reset All Custom Messages")
