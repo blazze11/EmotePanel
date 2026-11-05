@@ -137,6 +137,7 @@ local PANEL_MODES = {
     commands = {
         title = "Commands",
         list = {
+            -- Saved commands and favorites refer to these slot numbers. Append new entries.
             { name = "Invite Target",   action = "invite",     actionType = "command" },
             { name = "Inspect Target",  action = "inspect",    actionType = "command" },
             { name = "Trade Target",    action = "trade",      actionType = "command" },
@@ -147,18 +148,24 @@ local PANEL_MODES = {
             { name = "Who",             action = "who",        actionType = "command" },
             { name = "Leave Channel",   action = "leave",      actionType = "command" },
             { name = "Reload UI",       action = "reload",     actionType = "command" },
+            { name = "Pull in 5s",      action = (SLASH_COUNTDOWN1 or "/countdown") .. " 5", actionType = "command" },
+            { name = "Pull in 10s",     action = (SLASH_COUNTDOWN1 or "/countdown") .. " 10", actionType = "command" },
+            { name = "Mark Skull",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " !8", actionType = "command" },
+            { name = "Mark Cross",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " !7", actionType = "command" },
+            { name = "Clear Mark",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " 0", actionType = "command" },
+            { name = "Dismount",        action = SLASH_DISMOUNT1 or "/dismount", actionType = "command" },
         }
     }
 }
 
 local modeOrder = { "emotes", "chat", "party", "commands" }
-local pages = {}
+local categoryPages = {}
 for _, mode in ipairs(modeOrder) do
     local config = PANEL_MODES[mode]
     local pageCount = math.ceil(#config.list / SECTOR_COUNT)
     for first = 1, #config.list, SECTOR_COUNT do
         local number = math.floor((first - 1) / SECTOR_COUNT) + 1
-        table.insert(pages, {
+        table.insert(categoryPages, {
             mode = mode,
             first = first,
             count = math.min(SECTOR_COUNT, #config.list - first + 1),
@@ -166,12 +173,53 @@ for _, mode in ipairs(modeOrder) do
         })
     end
 end
-local currentPageIndex = 1
-local currentPage = pages[currentPageIndex]
+local currentPageIndex, currentPage
+local favorites
+
+local function FavoritePageCount()
+    return math.max(1, math.ceil(#favorites / SECTOR_COUNT))
+end
+
+local function GetPage(index)
+    local count = FavoritePageCount()
+    if index > count then return categoryPages[index - count] end
+    local first = (index - 1) * SECTOR_COUNT + 1
+    return {
+        mode = "favorites",
+        first = first,
+        count = math.min(SECTOR_COUNT, #favorites - first + 1),
+        title = count == 1 and "Favorites" or ("Favorites  %d / %d"):format(index, count),
+    }
+end
+
+local function FindFavorite(mode, index)
+    for position, entry in ipairs(favorites) do
+        if entry.mode == mode and entry.index == index then return position end
+    end
+end
+
+local function LoadFavorites()
+    local saved = EmotePanelSavedVars.favorites
+    favorites = {}
+    if type(saved) == "table" then
+        for _, entry in ipairs(saved) do
+            local mode = type(entry) == "table" and PANEL_MODES[entry.mode]
+            if mode and mode.list[entry.index] and not FindFavorite(entry.mode, entry.index) then
+                table.insert(favorites, { mode = entry.mode, index = entry.index })
+            end
+        end
+    end
+    EmotePanelSavedVars.favorites = favorites
+end
 
 local function GetSectorEntry(sector)
+    if not sector or sector < 1 or sector > currentPage.count then return end
     local mode = currentPage.mode
     local index = currentPage.first + sector - 1
+    if mode == "favorites" then
+        local entry = favorites[index]
+        mode, index = entry.mode, entry.index
+    end
     return mode, index, PANEL_MODES[mode].list[index]
 end
 
@@ -396,17 +444,6 @@ function EmotePanel:CreateMainFrame()
     frame:SetMovable(true)
     frame:SetFrameStrata("DIALOG")
     frame:SetClampedToScreen(true)
-    frame:EnableMouse(true)
-
-    SkinPanel(frame)
-
-    -- Drag the panel by its header or margins.
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", function()
-        frame:StopMovingOrSizing()
-        self:SavePosition()
-    end)
 
     return frame
 end
@@ -425,6 +462,7 @@ local function GetEntryName(mode, index, data)
 end
 
 function EmotePanel:Select(index)
+    if currentPage.count == 0 then return end
     index = (index - 1) % currentPage.count + 1
     if index == self.selected then return end
 
@@ -432,6 +470,7 @@ function EmotePanel:Select(index)
         self.labels[self.selected]:SetTextColor(0.9, 0.86, 0.79)
     end
     self.selected = index
+    self.highlight:Show()
     self.labels[index]:SetTextColor(1, 1, 1)
     local angle = (index - 1) * SECTOR_ANGLE
     local radius = self.highlightRadius
@@ -441,6 +480,7 @@ function EmotePanel:Select(index)
     local mode, slot, data = GetSectorEntry(index)
     self.selectionName:SetText(GetEntryName(mode, slot, data))
     self.selectionIndex:SetFormattedText("%02d / %02d", index, currentPage.count)
+    self:RefreshGamepadHint()
 end
 
 function EmotePanel:EditButton(mode, index, data)
@@ -478,8 +518,11 @@ end
 
 function EmotePanel:ActivateSector(index, mouseButton)
     local mode, slot, data = GetSectorEntry(index)
+    if not data then return end
     self:Select(index)
-    if mouseButton == "RightButton" then
+    if mouseButton == "MiddleButton" then
+        self:ToggleFavorite()
+    elseif mouseButton == "RightButton" then
         if data.actionType ~= "emote" then
             self:EditButton(mode, slot, data)
         end
@@ -524,6 +567,7 @@ function EmotePanel:CreateWheel()
     selectionCaption:SetPoint("CENTER", 0, 31)
     selectionCaption:SetTextColor(0.91, 0.76, 0.49)
     selectionCaption:SetText("SELECTED")
+    self.selectionCaption = selectionCaption
 
     self.selectionName = wheel:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     self.selectionName:SetPoint("CENTER")
@@ -545,7 +589,7 @@ function EmotePanel:CreateWheel()
         end
     end
 
-    local lastX, lastY, mouseDownButton, mouseDownSector
+    local lastX, lastY, mouseDownButton, mouseDownSector, mouseDownPage
     local function UpdateMouseSelection()
         local x, y = GetCursorPosition()
         if x == lastX and y == lastY then return end
@@ -567,12 +611,14 @@ function EmotePanel:CreateWheel()
         if data.actionType ~= "emote" then
             GameTooltip:AddLine("Right-click to edit", 0.7, 0.7, 0.7)
         end
+        local favoriteHint = FindFavorite(mode, slot) and "Middle-click to remove favorite" or "Middle-click to favorite"
+        GameTooltip:AddLine(favoriteHint, 0.7, 0.7, 0.7)
         GameTooltip:Show()
     end
     local function StopMouseSelection()
         wheel:SetScript("OnUpdate", nil)
         lastX, lastY = nil, nil
-        mouseDownButton, mouseDownSector = nil, nil
+        mouseDownButton, mouseDownSector, mouseDownPage = nil, nil, nil
         if GameTooltip:IsOwned(wheel) then GameTooltip:Hide() end
     end
     wheel:SetScript("OnEnter", function()
@@ -582,16 +628,18 @@ function EmotePanel:CreateWheel()
     wheel:SetScript("OnLeave", StopMouseSelection)
     wheel:SetScript("OnHide", StopMouseSelection)
     wheel:SetScript("OnMouseDown", function(_, mouseButton)
-        if (mouseButton == "LeftButton" or mouseButton == "RightButton") and self:CanUseWheel() then
+        if (mouseButton == "LeftButton" or mouseButton == "RightButton" or mouseButton == "MiddleButton")
+            and self:CanUseWheel() then
             mouseDownButton = mouseButton
             mouseDownSector = SectorUnderCursor(GetCursorPosition())
+            mouseDownPage = currentPageIndex
         end
     end)
     wheel:SetScript("OnMouseUp", function(_, mouseButton)
         if mouseButton ~= mouseDownButton then return end
-        local pressedSector = mouseDownSector
-        mouseDownButton, mouseDownSector = nil, nil
-        if not pressedSector or not self:CanUseWheel() then return end
+        local pressedSector, pressedPage = mouseDownSector, mouseDownPage
+        mouseDownButton, mouseDownSector, mouseDownPage = nil, nil, nil
+        if not pressedSector or pressedPage ~= currentPageIndex or not self:CanUseWheel() then return end
         local index = SectorUnderCursor(GetCursorPosition())
         if index == pressedSector then
             if GameTooltip:IsOwned(wheel) then GameTooltip:Hide() end
@@ -610,14 +658,25 @@ function EmotePanel:RefreshWheel(selection)
             label:SetPoint("CENTER", self.wheel, "CENTER", math.sin(angle) * radius, math.cos(angle) * radius)
             local name = GetEntryName(mode, slot, data)
             local customMessage = data.actionType ~= "emote" and GetCustomMessage(mode, slot)
-            label:SetText(name .. (customMessage and "*" or ""))
+            local favorite = currentPage.mode ~= "favorites" and FindFavorite(mode, slot)
+            local badge = favorite and CreateAtlasMarkup("collections-icon-favorites", 12, 12) .. " " or ""
+            label:SetText(badge .. name .. (customMessage and "*" or ""))
             label:SetTextColor(0.9, 0.86, 0.79)
         end
         label:SetShown(used)
     end
     local nextSelection = selection or self.selected or 1
     self.selected = nil
-    self:Select(nextSelection)
+    local hasEntries = currentPage.count > 0
+    self.selectionCaption:SetShown(hasEntries)
+    self.selectionIndex:SetShown(hasEntries)
+    if hasEntries then
+        self:Select(math.min(nextSelection, currentPage.count))
+    else
+        self.highlight:Hide()
+        self.selectionName:SetText("No favorites")
+        self:RefreshGamepadHint()
+    end
 end
 
 function EmotePanel:CreateControls()
@@ -625,6 +684,18 @@ function EmotePanel:CreateControls()
     local header = AddAtlas(frame, "gamepad-radial-menu-toptext", "BORDER")
     header:SetSize(374, 58)
     header:SetPoint("TOP", 0, -2)
+
+    local dragArea = CreateFrame("Frame", nil, frame)
+    dragArea:SetSize(206, 50)
+    dragArea:SetPoint("TOP", 0, -2)
+    dragArea:EnableMouse(true)
+    dragArea:RegisterForDrag("LeftButton")
+    dragArea:SetScript("OnDragStart", function() frame:StartMoving() end)
+    dragArea:SetScript("OnDragStop", function()
+        frame:StopMovingOrSizing()
+        self:SavePosition()
+    end)
+
     local caption = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     caption:SetPoint("TOP", 0, -10)
     caption:SetTextColor(0.91, 0.76, 0.49)
@@ -663,7 +734,7 @@ function EmotePanel:CreateControls()
     self.navigationHint:SetPoint("TOP", 0, -446)
     self.gamepadHint = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     self.gamepadHint:SetPoint("TOP", 0, -483)
-    frame:HookScript("OnShow", function() self:RefreshGamepadHint() end)
+    frame:HookScript("OnShow", function() self:ShowPage(1, 1) end)
     if InputDeviceIconSetManager then
         InputDeviceIconSetManager:RegisterActiveInputDeviceIconSetUpdatedCallback(self.RefreshGamepadHint, self)
     end
@@ -684,36 +755,75 @@ function EmotePanel:RefreshGamepadHint()
     self.navigationHint:SetText(GamepadGlyph("PADRSTICKAXIS", "Right stick") .. " "
         .. GamepadGlyph("DIRPADVERTICAL", "Up/Down") .. " Select       "
         .. GamepadGlyph("DIRPADHORIZONTAL", "Left/Right") .. " Page")
-    local actions = GamepadGlyph("PAD1", "A") .. " Use       "
-    if currentPage.mode ~= "emotes" then
-        actions = actions .. GamepadGlyph("PAD4", "Y") .. " Edit       "
+    local mode, slot, data = GetSectorEntry(self.selected)
+    local actions
+    if data then
+        local favoriteAction = FindFavorite(mode, slot) and "Unfavorite" or "Favorite"
+        actions = GamepadGlyph("PAD1", "A") .. " Use    "
+            .. GamepadGlyph("PAD3", "X") .. " " .. favoriteAction .. "    "
+        if data.actionType ~= "emote" then
+            actions = actions .. GamepadGlyph("PAD4", "Y") .. " Edit    "
+        end
+    else
+        actions = "Browse pages and press " .. GamepadGlyph("PAD3", "X") .. " to add    "
     end
     self.gamepadHint:SetText(actions .. GamepadGlyph("PAD2", "B") .. " Close")
 end
 
-function EmotePanel:CycleMode(direction)
-    currentPageIndex = (currentPageIndex - 1 + direction) % #pages + 1
-    currentPage = pages[currentPageIndex]
+function EmotePanel:ShowPage(index, selection)
+    currentPageIndex = index
+    currentPage = GetPage(index)
     self.titleText:SetText(currentPage.title)
-    GameTooltip:Hide()
-    self:RefreshWheel(1)
-    self:RefreshGamepadHint()
+    if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
+    self:RefreshWheel(selection)
+end
+
+function EmotePanel:CycleMode(direction)
+    local total = FavoritePageCount() + #categoryPages
+    self:ShowPage((currentPageIndex - 1 + direction) % total + 1, 1)
+end
+
+function EmotePanel:ToggleFavorite()
+    local mode, slot, data = GetSectorEntry(self.selected)
+    if not data then return end
+    local previousPageCount = FavoritePageCount()
+    local position = FindFavorite(mode, slot)
+    if position then
+        table.remove(favorites, position)
+    else
+        table.insert(favorites, { mode = mode, index = slot })
+    end
+
+    local newPageCount = FavoritePageCount()
+    local page = currentPageIndex
+    if currentPage.mode == "favorites" then
+        page = math.min(page, newPageCount)
+    else
+        page = page + newPageCount - previousPageCount
+    end
+    self:ShowPage(page, self.selected)
 end
 
 function EmotePanel:SetupGamepad()
     local frame = self.frame
     local pressed = {}
     local actions = {
-        PADDUP = function() self:Select(self.selected - 1) end,
-        PADDDOWN = function() self:Select(self.selected + 1) end,
+        PADDUP = function() if self.selected then self:Select(self.selected - 1) end end,
+        PADDDOWN = function() if self.selected then self:Select(self.selected + 1) end end,
         PADDLEFT = function() self:CycleMode(-1) end,
         PADDRIGHT = function() self:CycleMode(1) end,
         PAD1 = function() self:ActivateSector(self.selected, "LeftButton") end,
         PAD2 = function() frame:Hide() end,
+        PAD3 = function() self:ToggleFavorite() end,
         PAD4 = function() self:ActivateSector(self.selected, "RightButton") end,
     }
     local function CanUsePanelControls(key)
-        return (key ~= "PAD4" or currentPage.mode ~= "emotes") and self:CanUseWheel()
+        if not self:CanUseWheel() then return false end
+        if key == "PAD4" then
+            local _, _, data = GetSectorEntry(self.selected)
+            return data and data.actionType ~= "emote"
+        end
+        return true
     end
     frame:SetScript("OnGamePadButtonDown", function(_, key)
         if not actions[key] or IsModifierKeyDown() or not CanUsePanelControls(key) then
@@ -783,6 +893,9 @@ end
 
 function EmotePanel:Initialize()
     EmotePanelSavedVars = EmotePanelSavedVars or {}
+    LoadFavorites()
+    currentPageIndex = 1
+    currentPage = GetPage(1)
 
     self:CreateMainFrame()
     self:CreateWheel()
@@ -926,6 +1039,7 @@ local function ShowHelp()
     print("  /ep help - Show this help message")
     print("  Right stick or D-pad up/down: select. D-pad left/right: change page.")
     print("  A/Cross: use. B/Circle: close. Y/Triangle or right-click: edit a Say, Party, or Command sector.")
+    print("  X/Square or middle-click: add or remove a favorite. The wheel opens on Favorites.")
     print("  /ep config - Open settings panel")
     print("  /ep reset - Reset all custom messages")
     print("  /ep list - Show emote list panel")
