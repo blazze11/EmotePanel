@@ -1,8 +1,8 @@
-## Interface: 11505
+## Interface: 16001
 ## Title: EmotePanel
-## Notes: A simple addon with quick emote buttons
+## Notes: Controller-friendly emotes and quick chat for WoW: Forever
 ## Author: Blazze
-## Version: 0.0.4
+## Version: 0.1.0
 ## SavedVariables: EmotePanelSavedVars
 
 EmotePanel.lua
