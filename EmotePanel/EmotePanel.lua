@@ -40,8 +40,22 @@ local DEFAULT_POSITIONS = {
 }
 
 local function GetIconPath(icon)
-    if type(icon) == "number" or icon:find("\\", 1, true) then return icon end
+    if type(icon) == "number" or icon:find("\\", 1, true) or icon:sub(1, 6) == "atlas:" then return icon end
     return ICON_PATH .. icon
+end
+
+local function SetIconTexture(texture, icon, crop)
+    local atlas = type(icon) == "string" and icon:match("^atlas:(.+)$")
+    if atlas then
+        texture:SetAtlas(atlas)
+    else
+        texture:SetTexture(icon)
+        if crop and (type(icon) == "number" or icon:lower():find(ICON_PATH:lower(), 1, true)) then
+            texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+        else
+            texture:SetTexCoord(0, 1, 0, 1)
+        end
+    end
 end
 
 local function GetEntryIcon(mode, index, data)
@@ -244,14 +258,14 @@ local PANEL_MODES = {
 PANEL_MODES.panels = {
     title = "Game Panels",
     list = {
-        { name = "Character Info", icon = "INV_Chest_Plate01", open = function() ToggleCharacter("PaperDollFrame") end },
+        { name = "Character Info", icon = "INV_Chest_Plate01", open = function() EmotePanel:ShowCharacterLauncher() end },
         { name = "Spellbook", icon = "INV_Misc_Book_09", open = function() PlayerSpellsUtil.ToggleSpellBookFrame() end },
         { name = "Talents", icon = "Ability_Marksmanship", open = function() PlayerSpellsUtil.ToggleClassTalentOrSpecFrame() end },
-        { name = "Legacy", icon = "INV_Misc_Trophy_01", open = function() ToggleLegacySystemUI() end },
+        { name = "Legacy", icon = "atlas:gamepad-radial-icon-legacy", open = function() ToggleLegacySystemUI() end },
         { name = "Quest Log", icon = "INV_Misc_Note_01", open = function() ToggleQuestLog() end },
         { name = "Guilds & Communities", icon = "INV_Shirt_GuildTabard_01", open = function() ToggleGuildFrame() end },
         { name = "Group Finder", icon = "Ability_Warrior_RallyingCry", open = function() ToggleGroupFinderFrame() end },
-        { name = "Account Collections", icon = "INV_Misc_Chest_01", open = function() ToggleCollectionsJournal() end },
+        { name = "Account Collections", icon = "atlas:gamepad-radial-icon-collections", open = function() ToggleCollectionsJournal() end },
         { name = "Mounts", icon = "INV_Horse3Saddle008_Chestnut", open = function() ToggleCollectionsJournal(COLLECTIONS_JOURNAL_TAB_INDEX_MOUNTS) end },
         { name = "Pets", icon = "INV_ArfusPet_Classic", open = function() ToggleCollectionsJournal(COLLECTIONS_JOURNAL_TAB_INDEX_PETS) end },
         { name = "Toys", icon = "INV_SideTab_ToyBox_c60", open = function() ToggleCollectionsJournal(COLLECTIONS_JOURNAL_TAB_INDEX_TOYS) end },
@@ -572,6 +586,50 @@ local function SkinPanel(frame)
     AddAtlas(frame, PANEL_BORDER_ATLAS, "BORDER"):SetAllPoints()
 end
 
+function EmotePanel:ShowCharacterLauncher()
+    if InCombatLockdown() or not CharacterMicroButton then
+        print("EmotePanel: Use WoW's Character Info binding or Character button.")
+        return
+    end
+
+    local button = self.characterLauncher
+    if not button then
+        -- Keep the protected button separate so the wheel can still update in combat.
+        button = CreateFrame("Button", AddonName .. "CharacterLauncher", UIParent,
+            "SecureActionButtonTemplate,SecureHandlerStateTemplate,SecureHandlerShowHideTemplate")
+        button:Hide()
+        button:SetSize(290, 76)
+        button:SetPoint("CENTER")
+        button:SetFrameStrata("DIALOG")
+        button:EnableMouse(true)
+        SkinPanel(button)
+        button:SetHighlightAtlas(FOCUS_ATLAS)
+
+        local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+        label:SetPoint("CENTER")
+        label:SetText("Open Character Info\nClick or A / Cross · B / Circle to cancel")
+        button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        button:SetAttribute("useOnKeyDown", false)
+        button:SetAttribute("*type1", "click")
+        button:SetAttribute("*clickbutton1", CharacterMicroButton)
+        button:SetAttribute("_onshow", [[
+            local name = self:GetName()
+            self:SetBindingClick(true, "PAD1", name, "LeftButton")
+            self:SetBindingClick(true, "PAD2", name, "RightButton")
+            self:SetBindingClick(true, "PADFORWARD", name, "RightButton")
+        ]])
+        button:SetAttribute("_onhide", [[ self:ClearBindings() ]])
+        button:SetAttribute("_onstate-combat", [[ if newstate == "combat" then self:Hide() end ]])
+        RegisterStateDriver(button, "combat", "[combat] combat; peace")
+        button:HookScript("PostClick", function()
+            if not InCombatLockdown() then button:Hide() end
+        end)
+        table.insert(UISpecialFrames, button:GetName())
+        self.characterLauncher = button
+    end
+    button:Show()
+end
+
 local function CreateTextButton(parent, text)
     local button = CreateFrame("Button", nil, parent)
     local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -679,13 +737,13 @@ local function CreateIconPicker(dialog)
             cursor:ClearAllPoints()
             cursor:SetPoint("TOPLEFT", button, "TOPLEFT", -2, 2)
             cursor:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", 2, -2)
-            preview:SetTexture(button.value)
+            SetIconTexture(preview, button.value)
         end
     end
 
     local function Choose(icon)
         dialog.pendingIcon = icon
-        dialog.icon:SetTexture(icon)
+        SetIconTexture(dialog.icon, icon)
         picker:Hide()
     end
 
@@ -716,7 +774,7 @@ local function CreateIconPicker(dialog)
             button.value = icon
             button:SetShown(icon ~= nil)
             if icon then
-                button.icon:SetTexture(icon)
+                SetIconTexture(button.icon, icon)
                 button.current:SetShown(icon == dialog.pendingIcon)
             end
         end
@@ -968,7 +1026,7 @@ function EmotePanel:EditButton(mode, index, data)
     dialog.messageBox:SetText(previousMessage)
     dialog.defaultIcon = GetIconPath(data.icon)
     dialog.pendingIcon = GetEntryIcon(mode, index, data)
-    dialog.icon:SetTexture(dialog.pendingIcon)
+    SetIconTexture(dialog.icon, dialog.pendingIcon)
     dialog.saveButton:SetScript("OnClick", function()
         if editableText then
             local name = dialog.nameBox:GetText()
@@ -1150,13 +1208,7 @@ function EmotePanel:RefreshWheel(selection)
         local used = index <= currentPage.count
         if used then
             local mode, entryIndex, data = GetSectorEntry(index)
-            local icon = GetEntryIcon(mode, entryIndex, data)
-            slot.icon:SetTexture(icon)
-            if type(icon) == "string" and not icon:lower():find(ICON_PATH:lower(), 1, true) then
-                slot.icon:SetTexCoord(0, 1, 0, 1)
-            else
-                slot.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
-            end
+            SetIconTexture(slot.icon, GetEntryIcon(mode, entryIndex, data), true)
             slot.border:SetAtlas(ICON_BORDER)
             SetSelectionTint(slot.border)
             slot.favorite:SetShown(currentPage.mode ~= "favorites" and FindFavorite(mode, entryIndex) ~= nil)
@@ -1580,6 +1632,11 @@ end
 function EmotePanel_Toggle()
     local frame = EmotePanel.frame
     if not frame then return end
+    local launcher = EmotePanel.characterLauncher
+    if launcher and launcher:IsShown() then
+        if not InCombatLockdown() then launcher:Hide() end
+        return
+    end
     frame:SetShown(not frame:IsShown())
 end
 
