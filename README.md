@@ -1,2 +1,64 @@
-# EmotePanel
-EmotePanel WoW Addon
+# EmotePanel for WoW: Forever
+
+EmotePanel is an eight-slice wheel for controller and mouse. Use it for
+regular and voiced emotes, quick chat, game actions, learned professions,
+and shortcuts to Blizzard panels. The wheel opens on **Favorites**, where
+you can mix entries from any category.
+
+## Install
+
+Copy the inner `EmotePanel` folder from this repository into
+`World of Warcraft/_forever_/Interface/AddOns/`. The installed folder
+should contain `EmotePanel.toc`, `EmotePanel.lua`, and `Bindings.xml`.
+Enable **EmotePanel** in the AddOns menu. If the game is already open
+and the addon was previously installed, run `/reload`.
+
+This branch targets **WoW: Forever 1.60.1** (interface `16001`).
+
+## Controls
+
+Type `/ep` to open the wheel, or assign **Open or Close Emote Panel**
+under **Options → Keybindings → Emote Panel**.
+
+| Action | Controller | Mouse or keyboard |
+| --- | --- | --- |
+| Select a slice | Either stick or D-pad up/down | Hover |
+| Change page | LB/RB or D-pad left/right | Header arrows |
+| Use the selected entry | A / Cross | Left-click |
+| Add or remove a favorite | X / Square | Middle-click |
+| Edit an entry | Y / Triangle | Right-click |
+| Close the wheel | B / Circle or Start/Menu | Esc or the close button |
+
+Drag the header to move the wheel. The selected entry's message or
+action description appears below it.
+
+## Customize
+
+- Open **Settings → AddOns → EmotePanel**, use the **Settings** entry
+  on the Commands wheel, or type `/ep config`.
+- Open **Entries** or type `/ep list` to hide, restore, or edit entries.
+  Hidden entries also disappear from Favorites until you restore them.
+- Add your own emotes, Say messages, Party messages, or slash commands.
+  Use the icon picker to give each entry its own icon.
+- Uncheck **Close panel after action** to keep the wheel open while
+  using entries. Settings and the Character Info confirmation close the
+  wheel to take focus.
+
+## Game actions
+
+Built-in commands such as Ready Check, Roll, and pull countdowns use
+WoW's own actions. Custom slash commands use chat, and an open chat
+draft is preserved. Party messages require a group.
+
+The Professions page lists only professions learned by the current
+character. To open **Character Info** from the wheel outside combat,
+select the entry and confirm with a second click or A / Cross. In
+combat, use WoW's Character Info binding or micro menu.
+
+Use `/ep help` for the in-game command list.
+
+## AI assistance
+
+OpenAI Codex helped develop and document the Forever port. Automated
+checks use a simulated WoW UI and cannot verify every behavior in the
+live client.
