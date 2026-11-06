@@ -369,6 +369,18 @@ local function GetEntryPreview(mode, index, data)
     return text
 end
 
+local function GetAvailableChatBox()
+    local activeBox = ChatFrameUtil.GetActiveWindow()
+    local editBox = ChatFrameUtil.ChooseBoxForSend()
+    if not editBox then return end
+    local draft = editBox:GetText()
+    if (activeBox and activeBox:HasFocus()) or issecretvalue(draft) or draft ~= "" then
+        print("EmotePanel: Finish your current chat draft before using a command.")
+        return
+    end
+    return editBox
+end
+
 local function ExecuteAction(mode, index, data)
     if data.actionType == "emote" then
         local alias = "/" .. data.action:upper()
@@ -392,14 +404,8 @@ local function ExecuteAction(mode, index, data)
         ShowUIPanel(ProfessionsFrame)
     elseif data.actionType == "command" then
         local command = GetEntryPreview(mode, index, data)
-        local activeBox = ChatFrameUtil.GetActiveWindow()
-        local editBox = ChatFrameUtil.ChooseBoxForSend()
+        local editBox = GetAvailableChatBox()
         if not editBox then return end
-        local draft = editBox:GetText()
-        if (activeBox and activeBox:HasFocus()) or issecretvalue(draft) or draft ~= "" then
-            print("EmotePanel: Finish your current chat draft before using a command.")
-            return
-        end
         EmotePanel.frame:Hide()
         editBox:SetText(command)
         editBox:SendMessage()
@@ -936,9 +942,21 @@ function EmotePanel:EditButton(mode, index, data)
     dialog:Show()
 end
 
-function EmotePanel:ActivateSector(index, mouseButton)
+function EmotePanel:ActivateSector(index, mouseButton, fromMouse)
     local mode, slot, data = GetSectorEntry(index)
     if not data then return end
+    if fromMouse and mouseButton == "LeftButton" and data.actionType == "command" then
+        local verb = GetEntryPreview(mode, slot, data):match("^%S+"):upper()
+        local reload = SlashCmdList.RELOAD
+        if verb == "/RELOAD" or (reload and hash_SlashCmdList and hash_SlashCmdList[verb] == reload) then
+            if GetAvailableChatBox() then
+                -- Request reload before changing focus or updating the wheel.
+                ReloadUI()
+                self.frame:Hide()
+            end
+            return
+        end
+    end
     self:Select(index)
     if mouseButton == "MiddleButton" then
         self:ToggleFavorite()
@@ -1058,8 +1076,8 @@ function EmotePanel:CreateWheel()
         if not pressedSector or pressedPage ~= currentPageIndex or not self:CanUseWheel() then return end
         local index = SectorUnderCursor(GetCursorPosition())
         if index == pressedSector then
+            self:ActivateSector(index, mouseButton, true)
             if GameTooltip:IsOwned(wheel) then GameTooltip:Hide() end
-            self:ActivateSector(index, mouseButton)
         end
     end
     -- Left-click commands need the button's hardware click context.
