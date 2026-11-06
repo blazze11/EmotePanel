@@ -328,6 +328,8 @@ local customEntryTypes = {
     commands = { actionType = "command", icon = "INV_Misc_Gear_01", label = "Command" },
 }
 local categoryPages = {}
+local macrosByID, macroIDs = {}, {}
+local macroCharacter
 local professionPage = { mode = "professions", title = "Professions", count = 0, entries = {} }
 local categoryWheel = {
     mode = "categories", title = "Categories", count = SECTOR_COUNT, entries = {
@@ -449,6 +451,7 @@ local function ReadLearnedProfessions(...)
 end
 
 local function GetEntryData(mode, index)
+    if mode == "macros" then return macrosByID[index] end
     if mode == "professions" then return professionsBySkillLine[index] end
     if mode == "emotes" and type(index) == "string" then return nativeEmotes[index] end
     local config = PANEL_MODES[mode]
@@ -459,7 +462,47 @@ local function GetEntryData(mode, index)
     return config and config.list[index]
 end
 
+local function ReadMacros()
+    wipe(macrosByID)
+    wipe(macroIDs)
+    local accountCount, characterCount = GetNumMacros()
+    local accountLimit = (Constants and Constants.MacroConsts and Constants.MacroConsts.MAX_ACCOUNT_MACROS)
+        or MAX_ACCOUNT_MACROS
+    if not macroCharacter then
+        local character = UnitGUID("player")
+        if not (issecretvalue and issecretvalue(character)) and character then macroCharacter = character end
+    end
+    local function ReadScope(first, count, prefix, scope)
+        for index = first, first + count - 1 do
+            local name, icon = GetMacroInfo(index)
+            if name and name ~= "" then
+                local id = prefix .. name:lower()
+                if macrosByID[id] == nil then
+                    table.insert(macroIDs, id)
+                    macrosByID[id] = {
+                        name = name, icon = icon or "INV_Misc_QuestionMark", macroIndex = index,
+                        preview = scope .. " macro", actionType = "macro",
+                    }
+                else
+                    -- A saved name must resolve to exactly one macro in its scope.
+                    macrosByID[id] = false
+                end
+            end
+        end
+    end
+    ReadScope(1, accountCount, "account:", "Account")
+    if accountLimit and macroCharacter then
+        ReadScope(accountLimit + 1, characterCount, macroCharacter .. ":", "Character")
+    end
+end
+
 local function ForEachEntry(category, callback)
+    if category == "macros" then
+        for _, id in ipairs(macroIDs) do
+            if macrosByID[id] then callback(id, macrosByID[id]) end
+        end
+        return
+    end
     if category == "professions" then
         for _, data in ipairs(learnedProfessions) do callback(data.skillLine, data) end
         return
@@ -478,6 +521,7 @@ local function ForEachEntry(category, callback)
 end
 
 local function IsEntryHidden(mode, index)
+    if mode == "macros" then return not EmotePanelSavedVars.selectedMacros[index] end
     local hidden = EmotePanelSavedVars.hiddenEntries[mode]
     return hidden and hidden[index]
 end
@@ -523,9 +567,8 @@ end
 
 local function BuildCategoryPages()
     wipe(categoryPages)
-    for _, category in ipairs(categoryOrder) do
+    local function AddPages(category, title)
         local mode = GetStorageMode(category)
-        local title = category == "voicedEmotes" and voicedEmoteTitle or PANEL_MODES[mode].title
         local entries = GetVisibleEntryIDs(category)
         local pageCount = math.ceil(#entries / SECTOR_COUNT)
         for first = 1, #entries, SECTOR_COUNT do
@@ -541,7 +584,11 @@ local function BuildCategoryPages()
             })
         end
     end
+    for _, category in ipairs(categoryOrder) do
+        AddPages(category, category == "voicedEmotes" and voicedEmoteTitle or PANEL_MODES[category].title)
+    end
     table.insert(categoryPages, professionPage)
+    AddPages("macros", "Macros")
 end
 
 local function RefreshVisibleFavorites()
@@ -609,9 +656,10 @@ local function LoadFavorites()
     if type(saved) == "table" then
         for _, entry in ipairs(saved) do
             if type(entry) == "table" then
-                -- Keep profession favorites across characters and temporary unlearning.
+                -- Keep character-specific favorites even when the entry is unavailable.
                 local valid = GetEntryData(entry.mode, entry.index) or
-                    (entry.mode == "professions" and type(entry.index) == "number" and entry.index > 0 and entry.index % 1 == 0)
+                    (entry.mode == "professions" and type(entry.index) == "number" and entry.index > 0 and entry.index % 1 == 0) or
+                    (entry.mode == "macros" and type(entry.index) == "string")
                 if valid and not FindFavorite(entry.mode, entry.index) then
                     table.insert(favorites, { mode = entry.mode, index = entry.index })
                 end
@@ -651,6 +699,7 @@ end
 
 local function GetEntryPreview(mode, index, data)
     if mode == "categories" then return "Open " .. data.name end
+    if mode == "macros" then return data.preview end
     if data.actionType == "emote" then return "/" .. data.action end
     if data.actionType == "panel" then return "Open " .. data.name end
     if data.actionType == "profession" then
@@ -719,6 +768,8 @@ local function ExecuteAction(mode, index, data, fromMouse)
         end
         ProfessionsFrame:SelectBookPage()
         ShowUIPanel(ProfessionsFrame)
+    elseif data.actionType == "macro" then
+        EmotePanel:ShowMacroLauncher(data)
     elseif data.actionType == "command" then
         local command = GetSlashCommand(mode, index, data)
         if not command then
@@ -814,47 +865,73 @@ local function SkinPanel(frame)
     AddAtlas(frame, PANEL_BORDER_ATLAS, "BORDER"):SetAllPoints()
 end
 
+local function CreateSecureLauncher(suffix)
+    -- A separate parent keeps protected actions out of the regular wheel.
+    -- Keep the protected button separate so the wheel can still update in combat.
+    local button = CreateFrame("Button", AddonName .. suffix, UIParent,
+        "SecureActionButtonTemplate,SecureHandlerStateTemplate,SecureHandlerShowHideTemplate")
+    button:Hide()
+    button:SetSize(290, 76)
+    button:SetPoint("CENTER")
+    button:SetFrameStrata("DIALOG")
+    button:EnableMouse(true)
+    SkinPanel(button)
+    button:SetHighlightAtlas(FOCUS_ATLAS)
+
+    local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    label:SetPoint("CENTER")
+    button.label = label
+    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    button:SetAttribute("useOnKeyDown", false)
+    button:SetAttribute("_onshow", [[
+        local name = self:GetName()
+        self:SetBindingClick(true, "PAD1", name, "LeftButton")
+        self:SetBindingClick(true, "PAD2", name, "RightButton")
+        self:SetBindingClick(true, "PADFORWARD", name, "RightButton")
+    ]])
+    button:SetAttribute("_onhide", [[ self:ClearBindings() ]])
+    button:SetAttribute("_onstate-combat", [[ if newstate == "combat" then self:Hide() end ]])
+    RegisterStateDriver(button, "combat", "[combat] combat; peace")
+    button:HookScript("PostClick", function()
+        if not InCombatLockdown() then button:Hide() end
+    end)
+    table.insert(UISpecialFrames, button:GetName())
+    return button
+end
+
 function EmotePanel:ShowCharacterLauncher()
-    if InCombatLockdown() or not CharacterMicroButton then
+    if InCombatLockdown() then
         print("EmotePanel: Use WoW's Character Info binding or Character button.")
         return
     end
 
     local button = self.characterLauncher
     if not button then
-        -- Keep the protected button separate so the wheel can still update in combat.
-        button = CreateFrame("Button", AddonName .. "CharacterLauncher", UIParent,
-            "SecureActionButtonTemplate,SecureHandlerStateTemplate,SecureHandlerShowHideTemplate")
-        button:Hide()
-        button:SetSize(290, 76)
-        button:SetPoint("CENTER")
-        button:SetFrameStrata("DIALOG")
-        button:EnableMouse(true)
-        SkinPanel(button)
-        button:SetHighlightAtlas(FOCUS_ATLAS)
-
-        local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        label:SetPoint("CENTER")
-        label:SetText("Open Character Info\nClick or A / Cross · B / Circle to cancel")
-        button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-        button:SetAttribute("useOnKeyDown", false)
+        button = CreateSecureLauncher("CharacterLauncher")
+        button.label:SetText("Open Character Info\nClick or A / Cross · B / Circle to cancel")
         button:SetAttribute("*type1", "click")
         button:SetAttribute("*clickbutton1", CharacterMicroButton)
-        button:SetAttribute("_onshow", [[
-            local name = self:GetName()
-            self:SetBindingClick(true, "PAD1", name, "LeftButton")
-            self:SetBindingClick(true, "PAD2", name, "RightButton")
-            self:SetBindingClick(true, "PADFORWARD", name, "RightButton")
-        ]])
-        button:SetAttribute("_onhide", [[ self:ClearBindings() ]])
-        button:SetAttribute("_onstate-combat", [[ if newstate == "combat" then self:Hide() end ]])
-        RegisterStateDriver(button, "combat", "[combat] combat; peace")
-        button:HookScript("PostClick", function()
-            if not InCombatLockdown() then button:Hide() end
-        end)
-        table.insert(UISpecialFrames, button:GetName())
         self.characterLauncher = button
     end
+    self.frame:Hide()
+    button:Show()
+end
+
+function EmotePanel:ShowMacroLauncher(data)
+    if InCombatLockdown() then
+        print("EmotePanel: Macros can be run from the wheel outside combat.")
+        return
+    end
+    if GetMacroInfo(data.macroIndex) ~= data.name then return end
+
+    local button = self.macroLauncher
+    if not button then
+        button = CreateSecureLauncher("MacroLauncher")
+        button:SetAttribute("*type1", "macro")
+        self.macroLauncher = button
+    end
+    button:SetAttribute("*macro1", data.macroIndex)
+    button.label:SetText(("Run %s\nClick or A / Cross · B / Circle to cancel"):format(data.name:gsub("|", "||")))
     self.frame:Hide()
     button:Show()
 end
@@ -1624,7 +1701,9 @@ function EmotePanel:RefreshGamepadHint()
     local navigation = GamepadGlyph("PADLSTICKAXIS", "Left stick") .. " / "
         .. GamepadGlyph("PADRSTICKAXIS", "Right stick") .. " "
         .. GamepadGlyph("DIRPADVERTICAL", "Up/Down") .. " Select"
-    if self.pageArrows[1]:IsShown() then
+    if currentPage == categoryWheel and self.pageArrows[1]:IsShown() then
+        navigation = navigation .. "       Left / " .. GamepadGlyph("PADLSHOULDER", "LB") .. " Macros"
+    elseif self.pageArrows[1]:IsShown() then
         navigation = navigation .. "       " .. GamepadGlyph("DIRPADHORIZONTAL", "Left/Right") .. " / "
             .. GamepadGlyph("PADLSHOULDER", "LB") .. " " .. GamepadGlyph("PADRSHOULDER", "RB") .. " Page"
     end
@@ -1658,7 +1737,8 @@ function EmotePanel:DisplayPage(index, page, selection)
         canPage = first ~= last
     end
     self.backButton:SetShown(inCategory == true)
-    for _, arrow in ipairs(self.pageArrows) do arrow:SetShown(canPage) end
+    self.pageArrows[1]:SetShown(canPage or (page == categoryWheel and GetCategoryPageRange("macros") ~= nil))
+    self.pageArrows[2]:SetShown(canPage)
     self.titleText:SetText(currentPage.title)
     if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
     self:RefreshWheel(selection)
@@ -1679,6 +1759,10 @@ end
 function EmotePanel:BackOrClose()
     if EmotePanelSavedVars.categoryWheel and currentPage ~= categoryWheel then
         local category = currentPage.category or currentPage.mode
+        if category == "macros" then
+            self:ShowStartPage()
+            return
+        end
         for index, entry in ipairs(categoryWheel.entries) do
             if entry.category == category then
                 self:DisplayPage(nil, categoryWheel, index)
@@ -1718,6 +1802,11 @@ function EmotePanel:RefreshGroupEntries()
 end
 
 function EmotePanel:CycleMode(direction)
+    if currentPage == categoryWheel and direction < 0 then
+        local first = GetCategoryPageRange("macros")
+        if first then self:ShowPage(first, 1) end
+        return
+    end
     if not currentPageIndex then return end
     local first, last = 1, FavoritePageCount() + #categoryPages
     if EmotePanelSavedVars.categoryWheel then
@@ -1872,8 +1961,10 @@ function EmotePanel:Initialize()
     EmotePanelSavedVars.customIcons = EmotePanelSavedVars.customIcons or {}
     EmotePanelSavedVars.entries = EmotePanelSavedVars.entries or {}
     EmotePanelSavedVars.hiddenEntries = EmotePanelSavedVars.hiddenEntries or {}
+    if type(EmotePanelSavedVars.selectedMacros) ~= "table" then EmotePanelSavedVars.selectedMacros = {} end
     if type(EmotePanelSavedVars.entryOrder) ~= "table" then EmotePanelSavedVars.entryOrder = {} end
     LoadNativeEmotes()
+    ReadMacros()
     LoadFavorites()
     grouped = not not IsInGroup()
     RefreshProfessions()
@@ -1910,7 +2001,7 @@ local function CreateHelpPanel(mainPanel)
 
     local description = helpPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     description:SetPoint("TOPLEFT", helpTitle, "BOTTOMLEFT", 0, -8)
-    description:SetText("Use Up or Down to reorder entries.\nUncheck an entry to hide it from its category and Favorites.")
+    description:SetText("Check a saved macro to place it on the wheel.\nUse Up or Down to reorder entries. Uncheck an entry to hide it.")
 
     local previousButton
     for _, mode in ipairs(modeOrder) do
@@ -1940,12 +2031,12 @@ local function CreateHelpPanel(mainPanel)
     scrollFrame.content = content
     scrollFrame:SetScrollChild(content)
 
-    local listModes = { unpack(categoryOrder) }
+    local listModes = { "macros", unpack(categoryOrder) }
     table.insert(listModes, "professions")
     for _, mode in ipairs(listModes) do
         local header = content:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
         header:SetText(mode == "professions" and professionPage.title
-            or mode == "voicedEmotes" and voicedEmoteTitle or PANEL_MODES[mode].title)
+            or mode == "macros" and "Macros" or mode == "voicedEmotes" and voicedEmoteTitle or PANEL_MODES[mode].title)
         headers[mode] = header
         rows[mode] = {}
 
@@ -1966,9 +2057,13 @@ local function CreateHelpPanel(mainPanel)
         check:SetSize(24, 24)
         check:SetPoint("LEFT")
         check:SetScript("OnClick", function(self)
-            local hidden = EmotePanelSavedVars.hiddenEntries
-            hidden[mode] = hidden[mode] or {}
-            hidden[mode][index] = not self:GetChecked() or nil
+            if mode == "macros" then
+                EmotePanelSavedVars.selectedMacros[index] = self:GetChecked() and true or nil
+            else
+                local hidden = EmotePanelSavedVars.hiddenEntries
+                hidden[mode] = hidden[mode] or {}
+                hidden[mode][index] = not self:GetChecked() or nil
+            end
             EmotePanel:RefreshEntryPages()
         end)
         row.check = check
@@ -2165,7 +2260,8 @@ end
 function EmotePanel_Toggle()
     local frame = EmotePanel.frame
     if not frame then return end
-    local launcher = EmotePanel.characterLauncher
+    local launcher = EmotePanel.macroLauncher
+    if not (launcher and launcher:IsShown()) then launcher = EmotePanel.characterLauncher end
     if launcher and launcher:IsShown() then
         if not InCombatLockdown() then launcher:Hide() end
         return
@@ -2182,6 +2278,7 @@ local function ShowHelp()
     print("  X/Square or middle-click: add or remove a favorite.")
     print("  Enable Open on Category Wheel in settings to browse by category. The default opens on Favorites.")
     print("  Game Panels follows Favorites. Panel shortcuts and learned professions can be favorited.")
+    print("  Check saved macros in /ep list. Use LB or D-pad left from Favorites or Categories to find them.")
     print("  /ep config - Open settings panel")
     print("  /ep reset - Reset icon and text overrides")
     print("  /ep list - Show, hide, reorder, edit, or add wheel entries")
@@ -2223,7 +2320,18 @@ local function OnEvent(self, event, ...)
     if event == "PLAYER_REGEN_ENABLED" then
         EmotePanel:SetupGamepad()
         self:UnregisterEvent(event)
+    elseif event == "UPDATE_MACROS" then
+        local launcher = EmotePanel.macroLauncher
+        if launcher and launcher:IsShown() and not InCombatLockdown() then launcher:Hide() end
+        ReadMacros()
+        EmotePanel:RefreshEntryPages()
+        local helpPanel = _G[AddonName .. "HelpPanel"]
+        if helpPanel and helpPanel:IsVisible() then helpPanel:refresh() end
     elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ENTERING_WORLD" then
+        if event == "PLAYER_ENTERING_WORLD" and not macroCharacter then
+            ReadMacros()
+            EmotePanel:RefreshEntryPages()
+        end
         EmotePanel:RefreshGroupEntries()
     elseif event == "SKILL_LINES_CHANGED" then
         local helpPanel = _G[AddonName .. "HelpPanel"]
@@ -2263,6 +2371,7 @@ local function OnEvent(self, event, ...)
         EmotePanel.optionsPanel = CreateInterfaceOptions()
         self:UnregisterEvent("ADDON_LOADED")
         self:RegisterEvent("SKILL_LINES_CHANGED")
+        self:RegisterEvent("UPDATE_MACROS")
         self:RegisterEvent("GROUP_ROSTER_UPDATE")
         self:RegisterEvent("PLAYER_ENTERING_WORLD")
         if InCombatLockdown() then
