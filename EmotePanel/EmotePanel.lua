@@ -274,6 +274,20 @@ local PANEL_MODES = {
             { name = "Settings",        action = "ep config", actionType = "command", icon = "atlas:gamepad-radial-icon-gamemenu",
                 preview = "Open EmotePanel settings",
                 run = OpenSettings },
+            { name = "Leave Group",     action = "leavegroup", actionType = "command", icon = "atlas:128-redbutton-exit",
+                preview = "Leave your current party or raid",
+                available = IsInGroup,
+                run = function()
+                    if LE_PARTY_CATEGORY_INSTANCE and IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then
+                        if ConfirmOrLeaveParty then
+                            ConfirmOrLeaveParty()
+                        else
+                            C_PartyInfo.LeaveParty(LE_PARTY_CATEGORY_INSTANCE)
+                        end
+                    else
+                        C_PartyInfo.LeaveParty()
+                    end
+                end },
         }
     }
 }
@@ -331,6 +345,7 @@ local learnedProfessions = {}
 local professionsBySkillLine = {}
 local currentPageIndex, currentPage
 local favorites, visibleFavorites
+local grouped
 
 local function GetStorageMode(category)
     return category == "voicedEmotes" and "emotes" or category
@@ -467,6 +482,11 @@ local function IsEntryHidden(mode, index)
     return hidden and hidden[index]
 end
 
+local function IsEntryVisible(mode, index)
+    local data = GetEntryData(mode, index)
+    return data and not IsEntryHidden(mode, index) and (not data.available or data.available())
+end
+
 local function GetOrderedEntryIDs(category, keepUnavailable)
     local defaultOrder, available = {}, {}
     ForEachEntry(category, function(index)
@@ -496,7 +516,7 @@ local function GetVisibleEntryIDs(category)
     local mode = GetStorageMode(category)
     local entries = {}
     for _, index in ipairs(GetOrderedEntryIDs(category)) do
-        if not IsEntryHidden(mode, index) then table.insert(entries, index) end
+        if IsEntryVisible(mode, index) then table.insert(entries, index) end
     end
     return entries
 end
@@ -527,7 +547,7 @@ end
 local function RefreshVisibleFavorites()
     visibleFavorites = {}
     for _, entry in ipairs(favorites) do
-        if GetEntryData(entry.mode, entry.index) and not IsEntryHidden(entry.mode, entry.index) then
+        if IsEntryVisible(entry.mode, entry.index) then
             table.insert(visibleFavorites, entry)
         end
     end
@@ -1315,7 +1335,7 @@ end
 
 function EmotePanel:ActivateSector(index, mouseButton, fromMouse)
     local mode, slot, data = GetSectorEntry(index)
-    if not data then return end
+    if not data or (data.available and not data.available()) then return end
     if currentPage == categoryWheel then
         if mouseButton == "LeftButton" then
             local first = GetCategoryPageRange(data.category)
@@ -1676,6 +1696,27 @@ function EmotePanel:RefreshEntryPages()
     self:ShowStartPage()
 end
 
+function EmotePanel:RefreshGroupEntries()
+    local inGroup = not not IsInGroup()
+    if inGroup == grouped then return end
+    grouped = inGroup
+
+    local category = currentPage.category or currentPage.mode
+    local first = GetCategoryPageRange(category)
+    local pageOffset = currentPageIndex and first and currentPageIndex - first or 0
+    BuildCategoryPages()
+    RefreshVisibleFavorites()
+
+    local newFirst, newLast = GetCategoryPageRange(category)
+    if newFirst then
+        self:ShowPage(math.min(newFirst + pageOffset, newLast), self.selected)
+    elseif first and EmotePanelSavedVars.categoryWheel then
+        self:DisplayPage(nil, { mode = category, title = PANEL_MODES[category].title, count = 0 })
+    elseif first then
+        self:ShowStartPage()
+    end
+end
+
 function EmotePanel:CycleMode(direction)
     if not currentPageIndex then return end
     local first, last = 1, FavoritePageCount() + #categoryPages
@@ -1712,6 +1753,7 @@ end
 function EmotePanel:SetupGamepad()
     local frame = self.frame
     local pressed = {}
+    local activationPage
     local function CloseForGameMenu() frame:Hide() end
     local function PreviousPage() self:CycleMode(-1) end
     local function NextPage() self:CycleMode(1) end
@@ -1760,12 +1802,14 @@ function EmotePanel:SetupGamepad()
         local action = GetAction(key)
         if not action or (action ~= CloseForGameMenu and IsModifierKeyDown()) then return true end
         pressed[key] = action
+        if action == actions.PAD1 then activationPage = currentPage end
         return false
     end)
     frame:SetScript("OnGamePadButtonUp", function(_, key)
         local action = pressed[key]
         if not action then return true end
         pressed[key] = nil
+        if action == actions.PAD1 and activationPage ~= currentPage then return false end
         if action == GetAction(key) then
             if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
             action()
@@ -1831,6 +1875,7 @@ function EmotePanel:Initialize()
     if type(EmotePanelSavedVars.entryOrder) ~= "table" then EmotePanelSavedVars.entryOrder = {} end
     LoadNativeEmotes()
     LoadFavorites()
+    grouped = not not IsInGroup()
     RefreshProfessions()
     BuildCategoryPages()
     currentPageIndex = 1
@@ -2178,6 +2223,8 @@ local function OnEvent(self, event, ...)
     if event == "PLAYER_REGEN_ENABLED" then
         EmotePanel:SetupGamepad()
         self:UnregisterEvent(event)
+    elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ENTERING_WORLD" then
+        EmotePanel:RefreshGroupEntries()
     elseif event == "SKILL_LINES_CHANGED" then
         local helpPanel = _G[AddonName .. "HelpPanel"]
         local listShown = helpPanel and helpPanel:IsVisible()
@@ -2216,6 +2263,8 @@ local function OnEvent(self, event, ...)
         EmotePanel.optionsPanel = CreateInterfaceOptions()
         self:UnregisterEvent("ADDON_LOADED")
         self:RegisterEvent("SKILL_LINES_CHANGED")
+        self:RegisterEvent("GROUP_ROSTER_UPDATE")
+        self:RegisterEvent("PLAYER_ENTERING_WORLD")
         if InCombatLockdown() then
             self:RegisterEvent("PLAYER_REGEN_ENABLED")
         else
