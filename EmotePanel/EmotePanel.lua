@@ -29,6 +29,70 @@ local SELECTION_COLORS = {
     profession = { 1, 0.61, 0.32 },
 }
 
+local GLYPH_STYLES = {
+    xbox = {
+        name = "Xbox", prefix = "gamepad-xbox1-",
+        icons = {
+            PAD1 = "buttona", PAD2 = "buttonb", PAD3 = "buttonx", PAD4 = "buttony",
+            PADLSHOULDER = "trigger-lb", PADRSHOULDER = "trigger-rb",
+            PADLSTICKAXIS = "stick-l", PADRSTICKAXIS = "stick-r",
+            DIRPAD = "dpadall", DIRPADHORIZONTAL = "dpadleftright", DIRPADVERTICAL = "dpadupdown",
+            PADDLEFT = "dpadleft", PADDRIGHT = "dpadright",
+        },
+    },
+    playstation = {
+        name = "PlayStation", prefix = "gamepad-ps-",
+        icons = {
+            PAD1 = "buttoncrox", PAD2 = "buttoncircle", PAD3 = "buttonsquare", PAD4 = "buttontriangle",
+            PADLSHOULDER = "triggerl1", PADRSHOULDER = "triggerr1",
+            PADLSTICKAXIS = "stickl", PADRSTICKAXIS = "stickr",
+            DIRPAD = "dpadall", DIRPADHORIZONTAL = "dpadleftright", DIRPADVERTICAL = "dpadupdown",
+            PADDLEFT = "dpadleft", PADDRIGHT = "dpadright",
+        },
+    },
+    switch = {
+        name = "Nintendo Switch", prefix = "gamepad-switch-128x-",
+        icons = {
+            PAD1 = "face-b", PAD2 = "face-a", PAD3 = "face-y", PAD4 = "face-x",
+            PADLSHOULDER = "shoulder-l", PADRSHOULDER = "shoulder-r",
+            PADLSTICKAXIS = "stick-l", PADRSTICKAXIS = "stick-r",
+            DIRPAD = "dpad-all", DIRPADHORIZONTAL = "dpad-leftright", DIRPADVERTICAL = "dpad-updown",
+            PADDLEFT = "dpad-left", PADDRIGHT = "dpad-right",
+        },
+    },
+}
+local glyphPrompts = {}
+
+local function GetStyleAtlas(style, key)
+    local icon = style.icons[key]
+    if not icon then return end
+    local atlas = style.prefix .. icon .. "-normal"
+    if C_Texture.GetAtlasInfo(atlas) then return atlas end
+end
+
+local function GetGlyphStyle()
+    local style = EmotePanelSavedVars.controllerGlyphs
+    if GLYPH_STYLES[style] and GetStyleAtlas(GLYPH_STYLES[style], "PAD1") then return style end
+    return "auto"
+end
+
+local function GamepadGlyph(key, fallback, size)
+    local style = GLYPH_STYLES[EmotePanelSavedVars.controllerGlyphs]
+    local atlas = style and GetStyleAtlas(style, key)
+    local icons = InputIconTextureSetUtility
+    if not atlas and icons and icons.GetActiveInputIconButtonTextures(key) then
+        atlas = icons.GetNormalActiveInputIconButtonTexture(key)
+    end
+    if type(atlas) ~= "string" then atlas = GetStyleAtlas(GLYPH_STYLES.xbox, key) end
+    if atlas then return CreateAtlasMarkup(atlas, size or 32, size or 32) end
+    return fallback
+end
+
+local function SetGlyphPrompt(fontString, render)
+    glyphPrompts[fontString] = render
+    fontString:SetText(render())
+end
+
 local DEFAULT_POSITION = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0 }
 local ANCHOR_OFFSETS = {
     TOPLEFT = {-0.5, 0.5}, TOP = {0, 0.5}, TOPRIGHT = {0.5, 0.5},
@@ -945,7 +1009,10 @@ function EmotePanel:ShowCharacterLauncher()
     local button = self.characterLauncher
     if not button then
         button = CreateSecureLauncher("CharacterLauncher")
-        button.label:SetText("Open Character Info\nClick or A / Cross · B / Circle to cancel")
+        SetGlyphPrompt(button.label, function()
+            return ("Open Character Info\nClick or %s to open    %s Cancel"):format(
+                GamepadGlyph("PAD1", "A", 20), GamepadGlyph("PAD2", "B", 20))
+        end)
         button:SetAttribute("*type1", "click")
         button:SetAttribute("*clickbutton1", CharacterMicroButton)
         self.characterLauncher = button
@@ -1063,6 +1130,14 @@ local function CreateIconPicker(dialog)
     status:SetPoint("LEFT", preview, "RIGHT", 8, -9)
     local hint = picker:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     hint:SetPoint("BOTTOM", 0, 10)
+    local function RenderHint()
+        return ("%s Select   %s %s Page   %s Choose   %s Back   %s %s"):format(
+            GamepadGlyph("DIRPAD", "D-pad", 18), GamepadGlyph("PADLSHOULDER", "LB", 18),
+            GamepadGlyph("PADRSHOULDER", "RB", 18), GamepadGlyph("PAD1", "A", 18),
+            GamepadGlyph("PAD2", "B", 18), GamepadGlyph("PAD4", "Y", 18),
+            picker.library and "Wheel Icons" or "Library")
+    end
+    SetGlyphPrompt(hint, RenderHint)
 
     local buttons = {}
     local function UpdateCursor()
@@ -1094,8 +1169,7 @@ local function CreateIconPicker(dialog)
         local offset = (self.page - 1) * pageSize
         self.selected = math.min(self.selected, count - offset)
         title:SetText(self.library and "WoW Icon Library" or "Wheel Icons")
-        hint:SetText(self.library and "D-pad: Select   LB/RB: Page   A: Choose   B: Back   Y: Wheel Icons"
-            or "D-pad: Select   LB/RB: Page   A: Choose   B: Back   Y: Library")
+        hint:SetText(RenderHint())
         self.libraryButton:SetText(self.library and "Wheel" or "Library")
         status:SetFormattedText("%d / %d", self.page, pages)
         for index, button in ipairs(buttons) do
@@ -1248,7 +1322,9 @@ local function CreateCustomMessageDialog()
 
     local editHint = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     editHint:SetPoint("BOTTOM", 0, 52)
-    editHint:SetText("Y / Triangle: Choose Icon    A / Cross: Save")
+    SetGlyphPrompt(editHint, function()
+        return ("%s Choose Icon    %s Save"):format(GamepadGlyph("PAD4", "Y", 18), GamepadGlyph("PAD1", "A", 18))
+    end)
     dialog.errorText = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     dialog.errorText:SetPoint("BOTTOM", 0, 72)
     dialog.errorText:SetTextColor(1, 0.4, 0.4)
@@ -1816,19 +1892,13 @@ function EmotePanel:CreateControls()
         self:ShowStartPage()
     end)
     if InputDeviceIconSetManager then
-        InputDeviceIconSetManager:RegisterActiveInputDeviceIconSetUpdatedCallback(self.RefreshGamepadHint, self)
+        InputDeviceIconSetManager:RegisterActiveInputDeviceIconSetUpdatedCallback(self.RefreshControllerPrompts, self)
     end
 end
 
-local function GamepadGlyph(key, fallback)
-    local icons = InputIconTextureSetUtility
-    if icons and icons.GetActiveInputIconButtonTextures(key) then
-        local atlas = icons.GetNormalActiveInputIconButtonTexture(key)
-        if type(atlas) == "string" then
-            return CreateAtlasMarkup(atlas, 32, 32)
-        end
-    end
-    return fallback
+function EmotePanel:RefreshControllerPrompts()
+    self:RefreshGamepadHint()
+    for fontString, render in pairs(glyphPrompts) do fontString:SetText(render()) end
 end
 
 function EmotePanel:RefreshGamepadHint()
@@ -1836,11 +1906,13 @@ function EmotePanel:RefreshGamepadHint()
         .. GamepadGlyph("PADRSTICKAXIS", "Right stick") .. " "
         .. GamepadGlyph("DIRPADVERTICAL", "Up/Down") .. " Select"
     if currentPage == categoryWheel and self.pageArrows[1]:IsShown() then
-        navigation = navigation .. "       Left / " .. GamepadGlyph("PADLSHOULDER", "LB") .. " Macros"
+        navigation = navigation .. "       " .. GamepadGlyph("PADDLEFT", "Left") .. " / "
+            .. GamepadGlyph("PADLSHOULDER", "LB") .. " Macros"
     elseif EmotePanelSavedVars.categoryWheel and currentPage.mode == "macros" then
         local _, last = GetCategoryPageRange("macros")
         local destination = currentPageIndex == last and "Categories" or "Next page"
-        navigation = navigation .. "       Right / " .. GamepadGlyph("PADRSHOULDER", "RB") .. " " .. destination
+        navigation = navigation .. "       " .. GamepadGlyph("PADDRIGHT", "Right") .. " / "
+            .. GamepadGlyph("PADRSHOULDER", "RB") .. " " .. destination
     elseif self.pageArrows[1]:IsShown() then
         navigation = navigation .. "       " .. GamepadGlyph("DIRPADHORIZONTAL", "Left/Right") .. " / "
             .. GamepadGlyph("PADLSHOULDER", "LB") .. " " .. GamepadGlyph("PADRSHOULDER", "RB") .. " Page"
@@ -2348,7 +2420,9 @@ local function CreateCustomizationPanel(mainPanel)
     -- Add instructions
     local instructions1 = customizationPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     instructions1:SetPoint("TOPLEFT", customTitle, "BOTTOMLEFT", 0, -8)
-    instructions1:SetText("Right-click any sector or press Y/Triangle to edit its icon.")
+    SetGlyphPrompt(instructions1, function()
+        return ("Right-click a sector or press %s to edit its icon."):format(GamepadGlyph("PAD4", "Y", 18))
+    end)
 
     local instructions2 = customizationPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     instructions2:SetPoint("TOPLEFT", instructions1, "BOTTOMLEFT", 0, -8)
@@ -2550,7 +2624,7 @@ local function CreateInterfaceOptions()
     title:SetText("EmotePanel Options")
 
     local instructions = CreateFrame("Frame", nil, mainPanel)
-    instructions:SetSize(480, 46)
+    instructions:SetSize(480, 52)
     instructions:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
     local function AddInstruction(label, detail, y)
         local heading = instructions:CreateFontString(nil, "ARTWORK", "GameFontNormal")
@@ -2560,9 +2634,16 @@ local function CreateInterfaceOptions()
         body:SetPoint("TOPLEFT", 108, y)
         body:SetJustifyH("LEFT")
         body:SetText(detail)
+        return body
     end
     AddInstruction("Open the wheel", "Type /ep or assign a shortcut under Emote Panel in Keybindings.", 0)
-    AddInstruction("Controller", "Aim with either stick or the D-pad. Press A/Cross to use an action.\nUse LB/RB to change pages and B/Circle to go back or close.", -18)
+    SetGlyphPrompt(AddInstruction("Controller", "", -18), function()
+        return ("%s / %s or %s Select    %s Use\n%s %s Page    %s Back or close"):format(
+            GamepadGlyph("PADLSTICKAXIS", "Left stick", 16), GamepadGlyph("PADRSTICKAXIS", "Right stick", 16),
+            GamepadGlyph("DIRPADVERTICAL", "D-pad up/down", 16), GamepadGlyph("PAD1", "A", 16),
+            GamepadGlyph("PADLSHOULDER", "LB", 16), GamepadGlyph("PADRSHOULDER", "RB", 16),
+            GamepadGlyph("PAD2", "B", 16))
+    end)
 
     local behavior = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     behavior:SetPoint("TOPLEFT", instructions, "BOTTOMLEFT", 0, -10)
@@ -2577,6 +2658,25 @@ local function CreateInterfaceOptions()
     local closeLabel = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     closeLabel:SetPoint("LEFT", closeCheck, "RIGHT", 4, 0)
     closeLabel:SetText("Close panel after action")
+
+    local glyphLabel = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    glyphLabel:SetPoint("LEFT", closeCheck, "LEFT", 208, 0)
+    glyphLabel:SetText("Controller glyphs")
+    local glyphDropdown = CreateFrame("DropdownButton", AddonName .. "GlyphStyle", mainPanel, "WowStyle1DropdownTemplate")
+    glyphDropdown:SetWidth(150)
+    glyphDropdown:SetPoint("LEFT", glyphLabel, "RIGHT", 8, 0)
+    glyphDropdown:SetupMenu(function(_, root)
+        local function IsSelected(value) return GetGlyphStyle() == value end
+        local function Select(value)
+            EmotePanelSavedVars.controllerGlyphs = value ~= "auto" and value or nil
+            EmotePanel:RefreshControllerPrompts()
+        end
+        root:CreateRadio("Automatic", IsSelected, Select, "auto")
+        for _, value in ipairs({"xbox", "playstation", "switch"}) do
+            local style = GLYPH_STYLES[value]
+            if GetStyleAtlas(style, "PAD1") then root:CreateRadio(style.name, IsSelected, Select, value) end
+        end
+    end)
 
     local closeHelp = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     closeHelp:SetPoint("TOPLEFT", closeCheck, "BOTTOMLEFT", 0, -4)
@@ -2619,9 +2719,12 @@ local function CreateInterfaceOptions()
     resetGeneral:SetSize(120, 24)
     resetGeneral:SetPoint("TOPLEFT", resetTitle, "BOTTOMLEFT", 0, -7)
     resetGeneral:SetScript("OnClick", function()
-        StaticPopup_Show("EMOTEPANEL_RESET_SETTINGS", "Restore Close panel after action to its default (enabled)?", nil, function()
+        StaticPopup_Show("EMOTEPANEL_RESET_SETTINGS", "Restore Close panel after action and Automatic controller glyphs?", nil, function()
             EmotePanelSavedVars.closePanelAfterAction = nil
+            EmotePanelSavedVars.controllerGlyphs = nil
             closeCheck:SetChecked(true)
+            glyphDropdown:GenerateMenu()
+            EmotePanel:RefreshControllerPrompts()
         end)
     end)
 
@@ -2677,15 +2780,20 @@ function EmotePanel_Toggle()
 end
 
 local function ShowHelp()
+    local function Glyph(key, fallback) return GamepadGlyph(key, fallback, 16) end
     print("|cFF00FF00EmotePanel Commands:|r")
     print("  /ep - Toggle EmotePanel")
     print("  /ep help - Show this help message")
-    print("  Either stick or D-pad up/down: select. LB/RB or D-pad left/right: change page.")
-    print("  A/Cross: open or use. B/Circle: go back or close. Y/Triangle or right-click: edit an action.")
-    print("  X/Square or middle-click: add or remove a favorite.")
+    print(("  %s / %s or %s Select. %s %s or %s Change page."):format(
+        Glyph("PADLSTICKAXIS", "Left stick"), Glyph("PADRSTICKAXIS", "Right stick"), Glyph("DIRPADVERTICAL", "D-pad up/down"),
+        Glyph("PADLSHOULDER", "LB"), Glyph("PADRSHOULDER", "RB"), Glyph("DIRPADHORIZONTAL", "D-pad left/right")))
+    print(("  %s Open or use. %s Back or close. %s or right-click to edit."):format(
+        Glyph("PAD1", "A"), Glyph("PAD2", "B"), Glyph("PAD4", "Y")))
+    print(("  %s or middle-click to add or remove a favorite."):format(Glyph("PAD3", "X")))
     print("  /ep categories - Enable, show, hide, or reorder the categories on the opening wheel")
     print("  Game Panels follows Favorites. Panel shortcuts and learned professions can be favorited.")
-    print("  Check saved macros in /ep list. Use LB or D-pad left from Favorites or Categories to find them.")
+    print(("  Check saved macros in /ep list. Use %s or %s from Favorites or Categories to find them."):format(
+        Glyph("PADLSHOULDER", "LB"), Glyph("PADDLEFT", "D-pad left")))
     print("  /ep config - Open settings panel")
     print("  /ep reset - Reset icon and text overrides")
     print("  /ep list - Show, hide, reorder, edit, or add wheel entries")
@@ -2712,7 +2820,9 @@ local function HandleSlashCommand(msg)
         EmotePanel.frame:Hide()
         Settings.OpenToCategory(categoryIDs.categories)
     elseif command == "scroll" then
-        print("EmotePanel: Use LB/RB, D-pad left/right, or the page arrows to browse the wheel.")
+        print(("EmotePanel: Use %s %s, %s, or the page arrows to browse the wheel."):format(
+            GamepadGlyph("PADLSHOULDER", "LB", 16), GamepadGlyph("PADRSHOULDER", "RB", 16),
+            GamepadGlyph("DIRPADHORIZONTAL", "D-pad left/right", 16)))
     elseif command == "reset" then
         StaticPopup_Show("EMOTEPANEL_RESET_ALL")
     else
