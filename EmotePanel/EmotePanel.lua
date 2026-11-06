@@ -1084,8 +1084,9 @@ end
 local function CreateIconPicker(dialog)
     local columns, rows = 8, 5
     local pageSize = columns * rows
+    local extraFooterHeight = 52
     local picker = CreateFrame("Frame", nil, dialog)
-    picker:SetSize(392, 342)
+    picker:SetSize(392, 342 + extraFooterHeight)
     picker:SetPoint("CENTER", UIParent, "CENTER", 0, 100)
     picker:SetFrameLevel(dialog:GetFrameLevel() + 10)
     picker:SetClampedToScreen(true)
@@ -1122,19 +1123,23 @@ local function CreateIconPicker(dialog)
 
     local preview = picker:CreateTexture(nil, "ARTWORK")
     preview:SetSize(46, 46)
-    preview:SetPoint("BOTTOMLEFT", 111, 31)
+    preview:SetPoint("BOTTOMLEFT", 111, 31 + extraFooterHeight)
     local selectedLabel = picker:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     selectedLabel:SetPoint("LEFT", preview, "RIGHT", 8, 8)
     selectedLabel:SetText("Selected")
     local status = picker:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     status:SetPoint("LEFT", preview, "RIGHT", 8, -9)
-    local hint = picker:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    hint:SetPoint("BOTTOM", 0, 10)
+    local navigationHint = picker:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    navigationHint:SetPoint("BOTTOM", 0, 42)
+    SetGlyphPrompt(navigationHint, function()
+        return ("%s Select    %s %s Page"):format(
+            GamepadGlyph("DIRPAD", "D-pad"), GamepadGlyph("PADLSHOULDER", "LB"), GamepadGlyph("PADRSHOULDER", "RB"))
+    end)
+    local hint = picker:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    hint:SetPoint("BOTTOM", 0, 8)
     local function RenderHint()
-        return ("%s Select   %s %s Page   %s Choose   %s Back   %s %s"):format(
-            GamepadGlyph("DIRPAD", "D-pad", 18), GamepadGlyph("PADLSHOULDER", "LB", 18),
-            GamepadGlyph("PADRSHOULDER", "RB", 18), GamepadGlyph("PAD1", "A", 18),
-            GamepadGlyph("PAD2", "B", 18), GamepadGlyph("PAD4", "Y", 18),
+        return ("%s Choose    %s Back    %s %s"):format(
+            GamepadGlyph("PAD1", "A"), GamepadGlyph("PAD2", "B"), GamepadGlyph("PAD4", "Y"),
             picker.library and "Wheel Icons" or "Library")
     end
     SetGlyphPrompt(hint, RenderHint)
@@ -1249,15 +1254,15 @@ local function CreateIconPicker(dialog)
 
     local previous = CreateTextButton(picker, "<")
     previous:SetSize(27, 24)
-    previous:SetPoint("BOTTOMLEFT", 23, 43)
+    previous:SetPoint("BOTTOMLEFT", 23, 43 + extraFooterHeight)
     previous:SetScript("OnClick", function() picker:ChangePage(-1) end)
     local nextPage = CreateTextButton(picker, ">")
     nextPage:SetSize(27, 24)
-    nextPage:SetPoint("BOTTOMLEFT", 56, 43)
+    nextPage:SetPoint("BOTTOMLEFT", 56, 43 + extraFooterHeight)
     nextPage:SetScript("OnClick", function() picker:ChangePage(1) end)
     local default = CreateTextButton(picker, "Default")
     default:SetSize(63, 24)
-    default:SetPoint("BOTTOMRIGHT", -23, 43)
+    default:SetPoint("BOTTOMRIGHT", -23, 43 + extraFooterHeight)
     default:SetScript("OnClick", function() Choose(dialog.defaultIcon) end)
     local library = CreateTextButton(picker, "Library")
     picker.libraryButton = library
@@ -1285,7 +1290,7 @@ end
 
 local function CreateCustomMessageDialog()
     local dialog = CreateFrame("Frame", "EmotePanelCustomMessageDialog", UIParent)
-    dialog:SetSize(320, 278)
+    dialog:SetSize(320, 310)
     dialog:SetPoint("CENTER", 0, 200)
     dialog:SetFrameStrata("DIALOG")
     dialog:SetFrameLevel(100)
@@ -1320,13 +1325,13 @@ local function CreateCustomMessageDialog()
         dialog.picker:Show()
     end)
 
-    local editHint = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    local editHint = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     editHint:SetPoint("BOTTOM", 0, 52)
     SetGlyphPrompt(editHint, function()
-        return ("%s Choose Icon    %s Save"):format(GamepadGlyph("PAD4", "Y", 18), GamepadGlyph("PAD1", "A", 18))
+        return ("%s Choose Icon    %s Save"):format(GamepadGlyph("PAD4", "Y"), GamepadGlyph("PAD1", "A"))
     end)
     dialog.errorText = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    dialog.errorText:SetPoint("BOTTOM", 0, 72)
+    dialog.errorText:SetPoint("BOTTOM", 0, 86)
     dialog.errorText:SetTextColor(1, 0.4, 0.4)
 
     local saveButton = CreateTextButton(dialog, "Save")
@@ -2421,7 +2426,7 @@ local function CreateCustomizationPanel(mainPanel)
     local instructions1 = customizationPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     instructions1:SetPoint("TOPLEFT", customTitle, "BOTTOMLEFT", 0, -8)
     SetGlyphPrompt(instructions1, function()
-        return ("Right-click a sector or press %s to edit its icon."):format(GamepadGlyph("PAD4", "Y", 18))
+        return ("Right-click a sector or press %s to edit its icon."):format(GamepadGlyph("PAD4", "Y"))
     end)
 
     local instructions2 = customizationPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
@@ -2538,7 +2543,7 @@ end
 
 local function CreatePositionControls(panel, anchor)
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    title:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -18)
+    title:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -13)
     title:SetText("Wheel position")
 
     local description = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
@@ -2624,29 +2629,35 @@ local function CreateInterfaceOptions()
     title:SetText("EmotePanel Options")
 
     local instructions = CreateFrame("Frame", nil, mainPanel)
-    instructions:SetSize(480, 52)
+    instructions:SetSize(480, 86)
     instructions:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
     local function AddInstruction(label, detail, y)
         local heading = instructions:CreateFontString(nil, "ARTWORK", "GameFontNormal")
         heading:SetPoint("TOPLEFT", 0, y)
         heading:SetText(label)
-        local body = instructions:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        local body = instructions:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         body:SetPoint("TOPLEFT", 108, y)
         body:SetJustifyH("LEFT")
         body:SetText(detail)
         return body
     end
-    AddInstruction("Open the wheel", "Type /ep or assign a shortcut under Emote Panel in Keybindings.", 0)
-    SetGlyphPrompt(AddInstruction("Controller", "", -18), function()
-        return ("%s / %s or %s Select    %s Use\n%s %s Page    %s Back or close"):format(
-            GamepadGlyph("PADLSTICKAXIS", "Left stick", 16), GamepadGlyph("PADRSTICKAXIS", "Right stick", 16),
-            GamepadGlyph("DIRPADVERTICAL", "D-pad up/down", 16), GamepadGlyph("PAD1", "A", 16),
-            GamepadGlyph("PADLSHOULDER", "LB", 16), GamepadGlyph("PADRSHOULDER", "RB", 16),
-            GamepadGlyph("PAD2", "B", 16))
+    AddInstruction("Open the wheel", "Type /ep or bind the wheel in Keybindings under Emote Panel.", 0)
+    local selectionHint = AddInstruction("Controller", "", -20)
+    SetGlyphPrompt(selectionHint, function()
+        return ("%s / %s or %s Select    %s Use"):format(
+            GamepadGlyph("PADLSTICKAXIS", "Left stick"), GamepadGlyph("PADRSTICKAXIS", "Right stick"),
+            GamepadGlyph("DIRPADVERTICAL", "D-pad up/down"), GamepadGlyph("PAD1", "A"))
+    end)
+    local pagingHint = instructions:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    pagingHint:SetPoint("TOPLEFT", selectionHint, "TOPLEFT", 0, -32)
+    pagingHint:SetJustifyH("LEFT")
+    SetGlyphPrompt(pagingHint, function()
+        return ("%s %s Page    %s Back or close"):format(
+            GamepadGlyph("PADLSHOULDER", "LB"), GamepadGlyph("PADRSHOULDER", "RB"), GamepadGlyph("PAD2", "B"))
     end)
 
     local behavior = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    behavior:SetPoint("TOPLEFT", instructions, "BOTTOMLEFT", 0, -10)
+    behavior:SetPoint("TOPLEFT", instructions, "BOTTOMLEFT", 0, -7)
     behavior:SetText("Wheel behavior")
 
     local closeCheck = CreateFrame("CheckButton", nil, mainPanel, "UICheckButtonTemplate")
@@ -2688,7 +2699,7 @@ local function CreateInterfaceOptions()
     local categoriesPanel = CreateCategoriesPanel(mainPanel)
 
     local pagesTitle = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    pagesTitle:SetPoint("TOPLEFT", positionStatus, "BOTTOMLEFT", 0, -14)
+    pagesTitle:SetPoint("TOPLEFT", positionStatus, "BOTTOMLEFT", 0, -9)
     pagesTitle:SetText("More settings")
     local pageLinks = {
         {"categories", "Categories", "Enable Category Wheel and arrange its segments.\nWith it off, the wheel opens on Favorites."},
@@ -2699,7 +2710,7 @@ local function CreateInterfaceOptions()
     for _, page in ipairs(pageLinks) do
         local button = CreateTextButton(mainPanel, page[2])
         button:SetSize(120, 24)
-        button:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, previous == pagesTitle and -7 or -8)
+        button:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -6)
         button:SetScript("OnClick", function()
             EmotePanel.frame:Hide()
             Settings.OpenToCategory(categoryIDs[page[1]])
@@ -2712,7 +2723,7 @@ local function CreateInterfaceOptions()
     end
 
     local resetTitle = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    resetTitle:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -16)
+    resetTitle:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -11)
     resetTitle:SetText("Reset settings")
 
     local resetGeneral = CreateTextButton(mainPanel, "Reset General")
