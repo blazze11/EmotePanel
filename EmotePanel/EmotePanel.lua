@@ -210,14 +210,19 @@ local PANEL_MODES = {
         list = {
             -- Saved commands and favorites refer to these slot numbers. Append new entries.
             { name = "Invite Target",   action = "invite",     actionType = "command", icon = "atlas:friendslist-invitebutton-default-normal",
+                preview = "Invite the targeted player to your group",
                 run = function() RunOnTargetPlayer(C_PartyInfo.InviteUnit) end },
             { name = "Inspect Target",  action = "inspect",    actionType = "command", icon = "INV_Professions_Inscription_ScribesMagnifyingGlass_Gold",
+                preview = "Open the target's inspection window",
                 run = function() InspectUnit("target") end },
             { name = "Trade Target",    action = "trade",      actionType = "command", icon = "INV_Misc_Coin_02",
+                preview = "Request a trade with your target",
                 run = function() InitiateTrade("target") end },
             { name = "Follow Target",   action = "follow",     actionType = "command", icon = "Ability_Tracking",
+                preview = "Follow your target",
                 run = function() FollowUnit("") end },
             { name = "Befriend Target", action = "friend",     actionType = "command", icon = "atlas:friends-icon-addFriend",
+                preview = "Add the targeted player to your friends list",
                 run = function()
                     if C_GameRules.IsGameRuleActive(Enum.GameRule.IngameFriendsListDisabled) then return end
                     if not UnitIsHumanPlayer("target") then
@@ -227,28 +232,39 @@ local PANEL_MODES = {
                     end
                 end },
             { name = "Roll",            action = "roll",       actionType = "command", icon = "Interface\\Buttons\\UI-GroupLoot-Dice-Up",
+                preview = "Roll a number from 1 to 100",
                 run = function() RandomRoll(1, 100) end },
             { name = "Ready Check",     action = "readycheck", actionType = "command", icon = "Interface\\RaidFrame\\ReadyCheck-Ready",
+                preview = "Start a ready check as group leader or assistant",
                 run = function()
                     if UnitIsGroupLeader("player") or UnitIsGroupAssistant("player") then C_PartyInfo.DoReadyCheck() end
                 end },
             { name = "Who",             action = "who",        actionType = "command", icon = "INV_SideTab_WhoList_c60",
+                preview = "Open the Who list and search nearby levels in this zone",
                 run = OpenWho },
             { name = "Chat Channels",   action = "leave",      actionType = "command", icon = "atlas:chatframe-button-icon-voicechat",
                 preview = "Open Chat Channels",
                 run = function() ToggleChannelFrame() end },
-            { name = "Reload UI",       action = "reload",     actionType = "command", icon = "INV_Misc_Gear_01" },
+            { name = "Reload UI",       action = "reload",     actionType = "command", icon = "INV_Misc_Gear_01",
+                preview = "Reload the game interface",
+                run = ReloadUI },
             { name = "Pull in 5s",      action = (SLASH_COUNTDOWN1 or "/countdown") .. " 5", actionType = "command", icon = "INV_Misc_PocketWatch_01",
+                preview = "Start a 5-second pull countdown",
                 run = function() C_PartyInfo.DoCountdown(5) end },
             { name = "Pull in 10s",     action = (SLASH_COUNTDOWN1 or "/countdown") .. " 10", actionType = "command", icon = "INV_Misc_PocketWatch_03",
+                preview = "Start a 10-second pull countdown",
                 run = function() C_PartyInfo.DoCountdown(10) end },
             { name = "Mark Skull",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " !8", actionType = "command", icon = "Interface\\TARGETINGFRAME\\UI-RaidTargetingIcon_8",
+                preview = "Mark your target with Skull",
                 run = function() MarkTarget(8) end },
             { name = "Mark Cross",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " !7", actionType = "command", icon = "Interface\\TARGETINGFRAME\\UI-RaidTargetingIcon_7",
+                preview = "Mark your target with Cross",
                 run = function() MarkTarget(7) end },
             { name = "Clear Mark",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " 0", actionType = "command", icon = "Interface\\RaidFrame\\ReadyCheck-NotReady",
+                preview = "Remove the raid marker from your target",
                 run = function() SetRaidTarget("target", 0) end },
             { name = "Dismount",        action = SLASH_DISMOUNT1 or "/dismount", actionType = "command", icon = "Ability_Mount_RidingHorse",
+                preview = "Dismount from your current mount",
                 run = function() Dismount() end },
         }
     }
@@ -459,6 +475,14 @@ local function GetSectorEntry(sector)
     return mode, index, GetEntryData(mode, index)
 end
 
+local function GetSlashCommand(mode, index, data)
+    local override = GetCustomMessage(mode, index)
+    if data.run and (not override or override:gsub("^/+", ""):lower() == data.action:gsub("^/+", ""):lower()) then
+        return
+    end
+    return "/" .. (override or data.action):gsub("^/+", "")
+end
+
 local function GetEntryPreview(mode, index, data)
     if data.actionType == "emote" then return "/" .. data.action end
     if data.actionType == "panel" then return "Open " .. data.name end
@@ -467,10 +491,8 @@ local function GetEntryPreview(mode, index, data)
         local action = data.canCraft and "Open crafting" or "Open professions overview"
         return ("%s · %d / %d\n%s"):format(kind, data.rank, data.maxRank, action)
     end
-    local text = GetCustomMessage(mode, index) or data.action
-    if data.preview and text:gsub("^/+", "") == data.action then return data.preview end
-    if data.actionType == "command" then return "/" .. text:gsub("^/+", "") end
-    return text
+    if data.actionType == "command" then return GetSlashCommand(mode, index, data) or data.preview end
+    return GetCustomMessage(mode, index) or data.action
 end
 
 local function GetAvailableChatBox()
@@ -519,13 +541,12 @@ local function ExecuteAction(mode, index, data, fromMouse)
         ProfessionsFrame:SelectBookPage()
         ShowUIPanel(ProfessionsFrame)
     elseif data.actionType == "command" then
-        local customCommand = GetCustomMessage(mode, index)
-        if data.run and (not customCommand or customCommand:gsub("^/+", "") == data.action:gsub("^/+", "")) then
+        local command = GetSlashCommand(mode, index, data)
+        if not command then
             data.run()
             EmotePanel.frame:Hide()
             return
         end
-        local command = GetEntryPreview(mode, index, data)
         local editBox = GetAvailableChatBox()
         if not editBox then return end
         EmotePanel.frame:Hide()
@@ -1050,17 +1071,19 @@ function EmotePanel:EditButton(mode, index, data, fromSettings)
         data = { name = "", action = "", icon = config.icon, actionType = config.actionType, custom = true }
     end
     local editableText = HasEditableText(data)
+    local nativeCommand = data.actionType == "command" and data.run ~= nil
     dialog:SetHeight(data.custom and 306 or editableText and 278 or 165)
     dialog.nameBox:SetShown(editableText)
     dialog.nameBox.label:SetShown(editableText)
     dialog.messageBox:SetShown(editableText)
     dialog.messageBox.label:SetShown(editableText)
-    dialog.messageBox.label:SetText(data.actionType == "emote" and "Emote (e.g. /wave)"
+    dialog.messageBox.label:SetText(nativeCommand and "Slash override (optional)" or data.actionType == "emote" and "Emote (e.g. /wave)"
         or data.actionType == "command" and "Slash command" or "Message")
     dialog.resetButton:SetShown(not data.custom)
     dialog.iconButton:SetPoint("TOP", 20, editableText and -180 or -60)
     local previousName = GetEntryName(mode, index, data)
     local previousMessage = editableText and (GetCustomMessage(mode, index) or data.action) or ""
+    if nativeCommand then previousMessage = GetSlashCommand(mode, index, data) or "" end
     dialog.nameBox:SetText(previousName)
     dialog.messageBox:SetText(previousMessage)
     dialog.defaultIcon = GetIconPath(data.custom and customEntryTypes[mode].icon or data.icon)
@@ -1094,12 +1117,12 @@ function EmotePanel:EditButton(mode, index, data, fromSettings)
         elseif editableText then
             local name = dialog.nameBox:GetText()
             local message = dialog.messageBox:GetText()
-            if name ~= "" and message ~= "" then
+            if name ~= "" and (message ~= "" or nativeCommand) then
                 if name ~= previousName then
                     SaveCustomButtonName(mode, index, name ~= data.name and name or nil)
                 end
                 if message ~= previousMessage then
-                    SaveCustomMessage(mode, index, message ~= data.action and message or nil)
+                    SaveCustomMessage(mode, index, message ~= "" and message ~= data.action and message or nil)
                 end
             end
         end
@@ -1129,10 +1152,12 @@ function EmotePanel:ActivateSector(index, mouseButton, fromMouse)
         ExecuteAction(mode, slot, data, true)
         return
     end
-    if fromMouse and mouseButton == "LeftButton" and data.actionType == "command" then
-        local verb = GetEntryPreview(mode, slot, data):match("^%S+"):upper()
+    if mouseButton == "LeftButton" and data.actionType == "command" and (fromMouse or data.run == ReloadUI) then
+        local command = GetSlashCommand(mode, slot, data)
+        local verb = command and command:match("^%S+"):upper()
         local reload = SlashCmdList.RELOAD
-        if verb == "/RELOAD" or (reload and hash_SlashCmdList and hash_SlashCmdList[verb] == reload) then
+        if (not command and data.run == ReloadUI) or (fromMouse and verb and
+            (verb == "/RELOAD" or (reload and hash_SlashCmdList and hash_SlashCmdList[verb] == reload))) then
             if GetAvailableChatBox() then
                 -- Request reload before changing focus or updating the wheel.
                 ReloadUI()
