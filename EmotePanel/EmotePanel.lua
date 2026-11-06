@@ -1238,18 +1238,10 @@ function EmotePanel:ToggleFavorite()
     self:ShowPage(page, self.selected)
 end
 
-function EmotePanel:CloseForGameMenu()
-    if not self.frame:IsShown() then return false end
-    StaticPopup_Hide("EMOTEPANEL_RESET_BUTTON")
-    StaticPopup_Hide("EMOTEPANEL_RESET_ALL")
-    self.frame:Hide()
-    return true
-end
-
 function EmotePanel:SetupGamepad()
     local frame = self.frame
     local pressed = {}
-    local function CloseForGameMenu() self:CloseForGameMenu() end
+    local function CloseForGameMenu() frame:Hide() end
     local function PreviousPage() self:CycleMode(-1) end
     local function NextPage() self:CycleMode(1) end
     local actions = {
@@ -1375,16 +1367,14 @@ function EmotePanel:Initialize()
     self:LoadPosition()
     self.frame:HookScript("OnHide", function()
         if self.customMessageDialog then self.customMessageDialog:Hide() end
+        StaticPopup_Hide("EMOTEPANEL_RESET_BUTTON")
+        StaticPopup_Hide("EMOTEPANEL_RESET_ALL")
     end)
 
     -- Hide by default
     self.frame:Hide()
 
-    if RegisterGameMenuEscHandler and GameMenuEscPriority then
-        RegisterGameMenuEscHandler(GameMenuEscPriority.AddOn, function()
-            return self:CloseForGameMenu()
-        end)
-    end
+    -- Blizzard closes special windows separately from the protected Escape handlers.
     table.insert(UISpecialFrames, self.frame:GetName())
 end
 
