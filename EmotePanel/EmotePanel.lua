@@ -314,6 +314,18 @@ local customEntryTypes = {
 }
 local categoryPages = {}
 local professionPage = { mode = "professions", title = "Professions", count = 0, entries = {} }
+local categoryWheel = {
+    mode = "categories", title = "Categories", count = SECTOR_COUNT, entries = {
+        { category = "favorites", name = "Favorites", icon = "atlas:collections-icon-favorites" },
+        { category = "emotes", name = "Emotes", icon = "Spell_Misc_EmotionHappy", actionType = "emote" },
+        { category = "voicedEmotes", name = voicedEmoteTitle, icon = "Ability_Warrior_BattleShout", actionType = "emote" },
+        { category = "chat", name = "Say Chat", icon = "atlas:gamepad-radial-icon-chat", actionType = "say" },
+        { category = "party", name = "Party Chat", icon = "atlas:gamepad-radial-icon-communities", actionType = "party" },
+        { category = "commands", name = "Commands", icon = "INV_Misc_Gear_01", actionType = "command" },
+        { category = "panels", name = "Game Panels", icon = "atlas:gamepad-radial-icon-character", actionType = "panel" },
+        { category = "professions", name = "Professions", icon = "INV_Misc_Note_06", actionType = "profession" },
+    },
+}
 local learnedProfessions = {}
 local professionsBySkillLine = {}
 local currentPageIndex, currentPage
@@ -474,6 +486,7 @@ local function BuildCategoryPages()
             local pageIndex = mode == "panels" and number or #categoryPages + 1
             table.insert(categoryPages, pageIndex, {
                 mode = mode,
+                category = category,
                 first = first,
                 entries = entries,
                 count = math.min(SECTOR_COUNT, #entries - first + 1),
@@ -524,6 +537,19 @@ local function GetPage(index)
     }
 end
 
+local function GetCategoryPageRange(category)
+    local offset = FavoritePageCount()
+    if category == "favorites" then return 1, offset end
+    local first, last
+    for index, page in ipairs(categoryPages) do
+        if (page.category or page.mode) == category then
+            first = first or index + offset
+            last = index + offset
+        end
+    end
+    return first, last
+end
+
 local function FindFavorite(mode, index)
     for position, entry in ipairs(favorites) do
         if entry.mode == mode and entry.index == index then return position end
@@ -557,6 +583,7 @@ end
 local function GetSectorEntry(sector)
     if not sector or sector < 1 or sector > currentPage.count then return end
     local mode = currentPage.mode
+    if currentPage == categoryWheel then return mode, sector, categoryWheel.entries[sector] end
     local index = (currentPage.first or 1) + sector - 1
     if mode == "favorites" then
         local entry = visibleFavorites[index]
@@ -576,6 +603,7 @@ local function GetSlashCommand(mode, index, data)
 end
 
 local function GetEntryPreview(mode, index, data)
+    if mode == "categories" then return "Open " .. data.name end
     if data.actionType == "emote" then return "/" .. data.action end
     if data.actionType == "panel" then return "Open " .. data.name end
     if data.actionType == "profession" then
@@ -1124,6 +1152,7 @@ local function HasEditableText(data)
 end
 
 local function GetEntryName(mode, index, data)
+    if mode == "categories" then return data.name end
     return (HasEditableText(data) and GetCustomButtonName(mode, index)) or data.name
 end
 
@@ -1260,6 +1289,17 @@ end
 function EmotePanel:ActivateSector(index, mouseButton, fromMouse)
     local mode, slot, data = GetSectorEntry(index)
     if not data then return end
+    if currentPage == categoryWheel then
+        if mouseButton == "LeftButton" then
+            local first = GetCategoryPageRange(data.category)
+            if first then
+                self:ShowPage(first, 1)
+            else
+                self:DisplayPage(nil, { mode = data.category, title = data.name, count = 0 })
+            end
+        end
+        return
+    end
     if fromMouse and mouseButton == "LeftButton" and data.actionType == "profession" and data.canCraft then
         ExecuteAction(mode, slot, data, true)
         return
@@ -1365,9 +1405,11 @@ function EmotePanel:CreateWheel()
         GameTooltip:SetOwner(wheel, "ANCHOR_CURSOR_RIGHT")
         GameTooltip:SetText(GetEntryName(mode, slot, data))
         GameTooltip:AddLine(GetEntryPreview(mode, slot, data), 1, 1, 1, true)
-        GameTooltip:AddLine("Right-click to edit", 0.7, 0.7, 0.7)
-        local favoriteHint = FindFavorite(mode, slot) and "Middle-click to remove favorite" or "Middle-click to favorite"
-        GameTooltip:AddLine(favoriteHint, 0.7, 0.7, 0.7)
+        if currentPage ~= categoryWheel then
+            GameTooltip:AddLine("Right-click to edit", 0.7, 0.7, 0.7)
+            local favoriteHint = FindFavorite(mode, slot) and "Middle-click to remove favorite" or "Middle-click to favorite"
+            GameTooltip:AddLine(favoriteHint, 0.7, 0.7, 0.7)
+        end
         GameTooltip:Show()
     end
     local function StopMouseSelection()
@@ -1429,7 +1471,7 @@ function EmotePanel:RefreshWheel(selection)
         self:Select(math.min(nextSelection, currentPage.count))
     else
         self.highlight:Hide()
-        local emptyText = "No favorites"
+        local emptyText = currentPage.mode == "favorites" and "No favorites" or "No visible entries"
         if currentPage.mode == "professions" then
             emptyText = #learnedProfessions > 0 and "No visible professions" or "No learned professions"
         end
@@ -1466,6 +1508,7 @@ function EmotePanel:CreateControls()
     self.titleText:SetTextColor(1, 0.96, 0.87)
     self.titleText:SetText(currentPage.title)
 
+    self.pageArrows = {}
     for direction = -1, 1, 2 do
         local arrow = CreateFrame("Button", nil, frame)
         local atlas = direction < 0 and "common-icon-backarrow" or "common-icon-forwardarrow"
@@ -1474,7 +1517,14 @@ function EmotePanel:CreateControls()
         arrow:SetNormalAtlas(atlas)
         arrow:SetHighlightAtlas(atlas, "ADD")
         arrow:SetScript("OnClick", function() self:CycleMode(direction) end)
+        table.insert(self.pageArrows, arrow)
     end
+
+    self.backButton = CreateTextButton(frame, "Back")
+    self.backButton:SetSize(40, 24)
+    self.backButton:SetPoint("TOP", -152, -13)
+    self.backButton:SetScript("OnClick", function() self:BackOrClose() end)
+    self.backButton:Hide()
 
     CreateCloseButton(frame)
 
@@ -1505,7 +1555,7 @@ function EmotePanel:CreateControls()
     self.messagePreview:SetNonSpaceWrap(true)
     frame:HookScript("OnShow", function()
         RefreshProfessions()
-        self:ShowPage(1, 1)
+        self:ShowStartPage()
     end)
     if InputDeviceIconSetManager then
         InputDeviceIconSetManager:RegisterActiveInputDeviceIconSetUpdatedCallback(self.RefreshGamepadHint, self)
@@ -1524,48 +1574,93 @@ local function GamepadGlyph(key, fallback)
 end
 
 function EmotePanel:RefreshGamepadHint()
-    self.navigationHint:SetText(GamepadGlyph("PADLSTICKAXIS", "Left stick") .. " / "
+    local navigation = GamepadGlyph("PADLSTICKAXIS", "Left stick") .. " / "
         .. GamepadGlyph("PADRSTICKAXIS", "Right stick") .. " "
-        .. GamepadGlyph("DIRPADVERTICAL", "Up/Down") .. " Select       "
-        .. GamepadGlyph("DIRPADHORIZONTAL", "Left/Right") .. " / "
-        .. GamepadGlyph("PADLSHOULDER", "LB") .. " " .. GamepadGlyph("PADRSHOULDER", "RB") .. " Page")
+        .. GamepadGlyph("DIRPADVERTICAL", "Up/Down") .. " Select"
+    if self.pageArrows[1]:IsShown() then
+        navigation = navigation .. "       " .. GamepadGlyph("DIRPADHORIZONTAL", "Left/Right") .. " / "
+            .. GamepadGlyph("PADLSHOULDER", "LB") .. " " .. GamepadGlyph("PADRSHOULDER", "RB") .. " Page"
+    end
+    self.navigationHint:SetText(navigation)
     local mode, slot, data = GetSectorEntry(self.selected)
     local actions
-    if data then
+    if currentPage == categoryWheel then
+        actions = GamepadGlyph("PAD1", "A") .. " Open    "
+    elseif data then
         local favoriteAction = FindFavorite(mode, slot) and "Unfavorite" or "Favorite"
         local primaryAction = (data.actionType == "profession" or data.actionType == "panel") and "Open" or "Use"
         actions = GamepadGlyph("PAD1", "A") .. " " .. primaryAction .. "    "
             .. GamepadGlyph("PAD3", "X") .. " " .. favoriteAction .. "    "
             .. GamepadGlyph("PAD4", "Y") .. " Edit    "
-    elseif currentPage == professionPage then
+    elseif currentPage == professionPage or EmotePanelSavedVars.categoryWheel then
         actions = ""
     else
         actions = "Browse pages and press " .. GamepadGlyph("PAD3", "X") .. " to add    "
     end
-    self.gamepadHint:SetText(actions .. GamepadGlyph("PAD2", "B") .. " Close")
+    self.gamepadHint:SetText(actions .. GamepadGlyph("PAD2", "B") .. (self.backButton:IsShown() and " Back" or " Close"))
 end
 
-function EmotePanel:ShowPage(index, selection)
+function EmotePanel:DisplayPage(index, page, selection)
     currentPageIndex = index
-    currentPage = GetPage(index)
+    currentPage = page
+    local nested = EmotePanelSavedVars.categoryWheel
+    local inCategory = nested and page ~= categoryWheel
+    local canPage = not nested
+    if inCategory then
+        local first, last = GetCategoryPageRange(page.category or page.mode)
+        canPage = first ~= last
+    end
+    self.backButton:SetShown(inCategory == true)
+    for _, arrow in ipairs(self.pageArrows) do arrow:SetShown(canPage) end
     self.titleText:SetText(currentPage.title)
     if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
     self:RefreshWheel(selection)
+end
+
+function EmotePanel:ShowPage(index, selection)
+    self:DisplayPage(index, GetPage(index), selection)
+end
+
+function EmotePanel:ShowStartPage()
+    if EmotePanelSavedVars.categoryWheel then
+        self:DisplayPage(nil, categoryWheel, 1)
+    else
+        self:ShowPage(1, 1)
+    end
+end
+
+function EmotePanel:BackOrClose()
+    if EmotePanelSavedVars.categoryWheel and currentPage ~= categoryWheel then
+        local category = currentPage.category or currentPage.mode
+        for index, entry in ipairs(categoryWheel.entries) do
+            if entry.category == category then
+                self:DisplayPage(nil, categoryWheel, index)
+                return
+            end
+        end
+    end
+    self.frame:Hide()
 end
 
 function EmotePanel:RefreshEntryPages()
     BuildCategoryPages()
     RefreshProfessionPage()
     RefreshVisibleFavorites()
-    self:ShowPage(1, 1)
+    self:ShowStartPage()
 end
 
 function EmotePanel:CycleMode(direction)
-    local total = FavoritePageCount() + #categoryPages
-    self:ShowPage((currentPageIndex - 1 + direction) % total + 1, 1)
+    if not currentPageIndex then return end
+    local first, last = 1, FavoritePageCount() + #categoryPages
+    if EmotePanelSavedVars.categoryWheel then
+        first, last = GetCategoryPageRange(currentPage.category or currentPage.mode)
+        if first == last then return end
+    end
+    self:ShowPage((currentPageIndex - first + direction) % (last - first + 1) + first, 1)
 end
 
 function EmotePanel:ToggleFavorite()
+    if currentPage == categoryWheel then return end
     local mode, slot, data = GetSectorEntry(self.selected)
     if not data then return end
     local previousPageCount = FavoritePageCount()
@@ -1601,7 +1696,7 @@ function EmotePanel:SetupGamepad()
         PADLSHOULDER = PreviousPage,
         PADRSHOULDER = NextPage,
         PAD1 = function() self:ActivateSector(self.selected, "LeftButton") end,
-        PAD2 = function() frame:Hide() end,
+        PAD2 = function() self:BackOrClose() end,
         PAD3 = function() self:ToggleFavorite() end,
         PAD4 = function() self:ActivateSector(self.selected, "RightButton") end,
     }
@@ -1921,6 +2016,18 @@ local function CreateInterfaceOptions()
     closeLabel:SetPoint("LEFT", closeCheck, "RIGHT", 4, 0)
     closeLabel:SetText("Close panel after action")
 
+    local categoryCheck = CreateFrame("CheckButton", nil, mainPanel, "UICheckButtonTemplate")
+    categoryCheck:SetSize(24, 24)
+    categoryCheck:SetPoint("TOPLEFT", closeCheck, "BOTTOMLEFT", 0, -8)
+    categoryCheck:SetChecked(EmotePanelSavedVars.categoryWheel == true)
+    categoryCheck:SetScript("OnClick", function(self)
+        EmotePanelSavedVars.categoryWheel = not not self:GetChecked()
+        EmotePanel:ShowStartPage()
+    end)
+    local categoryLabel = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    categoryLabel:SetPoint("LEFT", categoryCheck, "RIGHT", 4, 0)
+    categoryLabel:SetText("Open on Category Wheel")
+
     -- Create panels using our panel creation functions
     local customizationPanel = CreateCustomizationPanel(mainPanel)
     local helpPanel = CreateHelpPanel(mainPanel)
@@ -1954,8 +2061,9 @@ local function ShowHelp()
     print("  /ep - Toggle EmotePanel")
     print("  /ep help - Show this help message")
     print("  Either stick or D-pad up/down: select. LB/RB or D-pad left/right: change page.")
-    print("  A/Cross: use. B/Circle: close. Y/Triangle or right-click: edit any sector.")
-    print("  X/Square or middle-click: add or remove a favorite. The wheel opens on Favorites.")
+    print("  A/Cross: open or use. B/Circle: go back or close. Y/Triangle or right-click: edit an action.")
+    print("  X/Square or middle-click: add or remove a favorite.")
+    print("  Enable Open on Category Wheel in settings to browse by category. The default opens on Favorites.")
     print("  Game Panels follows Favorites. Panel shortcuts and learned professions can be favorited.")
     print("  /ep config - Open settings panel")
     print("  /ep reset - Reset icon and text overrides")
@@ -2007,6 +2115,7 @@ local function OnEvent(self, event, ...)
             local wasFavoritePage = currentPage.mode == "favorites"
             RefreshProfessions()
             if listShown then helpPanel:refresh() end
+            if not currentPageIndex then return end
             local pageCount = FavoritePageCount()
             local page = currentPageIndex + pageCount - previousPageCount
             if wasFavoritePage then
