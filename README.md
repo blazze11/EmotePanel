@@ -2,8 +2,8 @@
 
 EmotePanel is an eight-slice wheel for controller and mouse. Use it for
 regular and voiced emotes, quick chat, game actions, learned professions,
-and shortcuts to Blizzard panels. The wheel opens on **Favorites**, where
-you can mix entries from any category.
+and shortcuts to Blizzard panels. The wheel opens on **Favorites** by default. You can also start on a
+customizable category wheel.
 
 ## Install
 
@@ -29,7 +29,8 @@ under **Options → Keybindings → Emote Panel**.
 | Use the selected entry | A / Cross | Left-click |
 | Add or remove a favorite | X / Square | Middle-click |
 | Edit an entry | Y / Triangle | Right-click |
-| Close the wheel | B / Circle or Start/Menu | Esc or the close button |
+| Go back or close the wheel | B / Circle | Back or the close button |
+| Dismiss the wheel | Start/Menu | Esc |
 
 Drag the header to move the wheel. The selected entry's message or
 action description appears below it.
@@ -40,13 +41,22 @@ action description appears below it.
 
 - Open **Settings → AddOns → EmotePanel**, use the **Settings** entry
   on the Commands wheel, or type `/ep config`.
-- Open **Entries** or type `/ep list` to hide, restore, or edit entries.
+- Open **Categories** or type `/ep categories` to enable Category Wheel
+  and choose its visible segments and order.
+- Open **Entries** or type `/ep list` to show, hide, reorder, or edit entries.
   Hidden entries also disappear from Favorites until you restore them.
+- Check saved WoW macros under **Macros** in Entries. Page left from
+  Favorites or Categories to reach them. In Category Wheel mode, page
+  right from the last Macros page to return to Categories. Macros run
+  directly outside combat and can be added to Favorites.
 - Add your own emotes, Say messages, Party messages, or slash commands.
   Use the icon picker to give each entry its own icon.
 - Uncheck **Close panel after action** to keep the wheel open while
   using entries. Settings and the Character Info confirmation close the
   wheel to take focus.
+- The main settings page includes wheel position, controller glyph style,
+  and separate resets for position, general settings, categories, and
+  icon or text overrides.
   
 <img width="596" height="569" alt="custom_icons" src="https://github.com/user-attachments/assets/0f9f0349-ae86-4a17-a7a9-08bb23878c41" />
 
@@ -54,7 +64,8 @@ action description appears below it.
 
 Built-in commands such as Ready Check, Roll, and pull countdowns use
 WoW's own actions. Custom slash commands use chat, and an open chat
-draft is preserved. Party messages require a group.
+draft is preserved. Party messages require a group. **Leave Group**
+appears in Commands while grouped. **World Map** is in Game Panels.
 
 The Professions page lists only professions learned by the current
 character. To open **Character Info** from the wheel outside combat,
