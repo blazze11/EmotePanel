@@ -178,14 +178,14 @@ local PANEL_MODES = {
     chat = {
         title = "Say Chat",
         list = {
-            { name = "Hello!",      action = "Hello! Hope you're having a great day!", actionType = "say", icon = "Spell_Misc_EmotionHappy" },
-            { name = "Well played", action = "Well played! That was awesome!",         actionType = "say", icon = "Achievement_General_StayClassy" },
-            { name = "Thanks",      action = "Thank you! Really appreciate it!",       actionType = "say", icon = "INV_Misc_GiftWrap_01" },
-            { name = "No problem",  action = "No problem! Happy to help!",             actionType = "say", icon = "Spell_Holy_BlessingOfProtection" },
-            { name = "BRB",         action = "Be right back, quick break",             actionType = "say", icon = "INV_Misc_PocketWatch_01" },
-            { name = "Bye",         action = "Farewell! Have a great adventure!",      actionType = "say", icon = "INV_Garrison_Hearthstone" },
-            { name = "LFG",         action = "Looking for group! Anyone interested?",  actionType = "say", icon = "atlas:gamepad-radial-icon-groupfinder" },
-            { name = "Quest",       action = "Anyone working on this quest?",          actionType = "say", icon = "atlas:gamepad-radial-icon-quests" },
+            { name = "Hello!",      action = "Hey!",                                   actionType = "say", icon = "Spell_Misc_EmotionHappy" },
+            { name = "Well played", action = "Well played!",                           actionType = "say", icon = "Achievement_General_StayClassy" },
+            { name = "Thanks",      action = "Thanks for the help!",                   actionType = "say", icon = "INV_Misc_GiftWrap_01" },
+            { name = "No problem",  action = "No problem!",                            actionType = "say", icon = "Spell_Holy_BlessingOfProtection" },
+            { name = "BRB",         action = "Be right back.",                         actionType = "say", icon = "INV_Misc_PocketWatch_01" },
+            { name = "Bye",         action = "See you around!",                        actionType = "say", icon = "INV_Garrison_Hearthstone" },
+            { name = "LFG nearby",  action = "Anyone nearby want to group up?",        actionType = "say", icon = "atlas:gamepad-radial-icon-groupfinder" },
+            { name = "Quest",       action = "Anyone on this quest want to team up?",   actionType = "say", icon = "atlas:gamepad-radial-icon-quests" },
             { name = "Gratz",       action = "Congratulations!",                       actionType = "say", icon = "INV_Misc_CelebrationCake_01" },
             { name = "Trade",       action = "Would you like to trade?",               actionType = "say", icon = "INV_Misc_Coin_01" },
         }
@@ -193,16 +193,16 @@ local PANEL_MODES = {
     party = {
         title = "Party Chat",
         list = {
-            { name = "Follow Me",    action = "Follow me please!",                     actionType = "party", icon = "Ability_Hunter_Pathfinding" },
-            { name = "Need Break",   action = "Need a quick break! Back in 5 minutes", actionType = "party", icon = "INV_Drink_05" },
-            { name = "Thanks Group", action = "Thanks everyone for the great run!",    actionType = "party", icon = "INV_Misc_GiftWrap_02" },
-            { name = "Good Job",     action = "Great job team! Well executed!",        actionType = "party", icon = "Achievement_Level_10" },
-            { name = "Ready Check",  action = "Everyone ready to continue?",           actionType = "party", icon = "Interface\\RaidFrame\\ReadyCheck-Ready" },
-            { name = "OOM",          action = "Out of mana, need to drink!",           actionType = "party", icon = "INV_Potion_76" },
-            { name = "Wait",         action = "Please wait for everyone!",             actionType = "party", icon = "INV_Misc_PocketWatch_02" },
-            { name = "Pulling",      action = "Pulling in 5 seconds!",                 actionType = "party", icon = "Ability_Hunter_SniperShot" },
-            { name = "CC",           action = "Please use crowd control!",             actionType = "party", icon = "Spell_Nature_Polymorph" },
-            { name = "Help",         action = "Need help here!",                       actionType = "party", icon = "Spell_Holy_Resurrection" },
+            { name = "Follow Me",    action = "Follow me this way.",                   actionType = "party", icon = "Ability_Hunter_Pathfinding" },
+            { name = "Need Break",   action = "Can we take a quick break?",             actionType = "party", icon = "INV_Drink_05" },
+            { name = "Thanks Group", action = "Thanks for the run!",                   actionType = "party", icon = "INV_Misc_GiftWrap_02" },
+            { name = "Good Job",     action = "Nice work, everyone!",                  actionType = "party", icon = "Achievement_Level_10" },
+            { name = "Ready?",       action = "Everyone ready for the next pull?",     actionType = "party", icon = "Interface\\RaidFrame\\ReadyCheck-Ready" },
+            { name = "OOM",          action = "Out of mana. Please wait while I drink.", actionType = "party", icon = "INV_Potion_76" },
+            { name = "Wait",         action = "Hold the pull. Let's regroup first.",   actionType = "party", icon = "INV_Misc_PocketWatch_02" },
+            { name = "Pulling",      action = "Pulling now. Stay with me.",             actionType = "party", icon = "Ability_Hunter_SniperShot" },
+            { name = "CC",           action = "Please use crowd control on my target.", actionType = "party", icon = "Spell_Nature_Polymorph" },
+            { name = "Help",         action = "I need help with these mobs!",          actionType = "party", icon = "Spell_Holy_Resurrection" },
         }
     },
     commands = {
@@ -223,7 +223,7 @@ local PANEL_MODES = {
                     if not UnitIsHumanPlayer("target") then
                         ToggleFriendsPanel()
                     elseif C_FriendList.IsLegacyFriendSystemEnabled() then
-                        RunOnTargetPlayer(C_FriendList.AddOrRemoveFriend)
+                        RunOnTargetPlayer(C_FriendList.AddFriend)
                     end
                 end },
             { name = "Roll",            action = "roll",       actionType = "command", icon = "Interface\\Buttons\\UI-GroupLoot-Dice-Up",
@@ -234,7 +234,7 @@ local PANEL_MODES = {
                 end },
             { name = "Who",             action = "who",        actionType = "command", icon = "INV_SideTab_WhoList_c60",
                 run = OpenWho },
-            { name = "Leave Channel",   action = "leave",      actionType = "command", icon = "atlas:chatframe-button-icon-voicechat",
+            { name = "Chat Channels",   action = "leave",      actionType = "command", icon = "atlas:chatframe-button-icon-voicechat",
                 preview = "Open Chat Channels",
                 run = function() ToggleChannelFrame() end },
             { name = "Reload UI",       action = "reload",     actionType = "command", icon = "INV_Misc_Gear_01" },
@@ -279,23 +279,14 @@ for _, entry in ipairs(PANEL_MODES.panels.list) do
 end
 
 local modeOrder = { "emotes", "chat", "party", "commands", "panels" }
+local customEntryTypes = {
+    emotes = { actionType = "emote", icon = "Spell_Misc_EmotionHappy", label = "Emote" },
+    chat = { actionType = "say", icon = "atlas:gamepad-radial-icon-chat", label = "Say" },
+    party = { actionType = "party", icon = "atlas:gamepad-radial-icon-communities", label = "Party" },
+    commands = { actionType = "command", icon = "INV_Misc_Gear_01", label = "Command" },
+}
 local categoryPages = {}
-for _, mode in ipairs(modeOrder) do
-    local config = PANEL_MODES[mode]
-    local pageCount = math.ceil(#config.list / SECTOR_COUNT)
-    for first = 1, #config.list, SECTOR_COUNT do
-        local number = math.floor((first - 1) / SECTOR_COUNT) + 1
-        local pageIndex = mode == "panels" and number or #categoryPages + 1
-        table.insert(categoryPages, pageIndex, {
-            mode = mode,
-            first = first,
-            count = math.min(SECTOR_COUNT, #config.list - first + 1),
-            title = ("%s  %d / %d"):format(config.title, number, pageCount),
-        })
-    end
-end
-local professionPage = { mode = "professions", title = "Professions", count = 0 }
-table.insert(categoryPages, professionPage)
+local professionPage = { mode = "professions", title = "Professions", count = 0, entries = {} }
 local learnedProfessions = {}
 local professionsBySkillLine = {}
 local currentPageIndex, currentPage
@@ -336,25 +327,76 @@ end
 local function GetEntryData(mode, index)
     if mode == "professions" then return professionsBySkillLine[index] end
     local config = PANEL_MODES[mode]
+    if config and type(index) == "number" and index < 0 then
+        local entries = EmotePanelSavedVars.entries[mode]
+        return entries and entries[-index]
+    end
     return config and config.list[index]
+end
+
+local function ForEachEntry(mode, callback)
+    if mode == "professions" then
+        for _, data in ipairs(learnedProfessions) do callback(data.skillLine, data) end
+        return
+    end
+    for index, data in ipairs(PANEL_MODES[mode].list) do callback(index, data) end
+    for index, data in ipairs(EmotePanelSavedVars.entries[mode] or {}) do callback(-index, data) end
+end
+
+local function IsEntryHidden(mode, index)
+    local hidden = EmotePanelSavedVars.hiddenEntries[mode]
+    return hidden and hidden[index]
+end
+
+local function GetVisibleEntryIDs(mode)
+    local entries = {}
+    ForEachEntry(mode, function(index)
+        if not IsEntryHidden(mode, index) then table.insert(entries, index) end
+    end)
+    return entries
+end
+
+local function BuildCategoryPages()
+    wipe(categoryPages)
+    for _, mode in ipairs(modeOrder) do
+        local entries = GetVisibleEntryIDs(mode)
+        local pageCount = math.ceil(#entries / SECTOR_COUNT)
+        for first = 1, #entries, SECTOR_COUNT do
+            local number = math.floor((first - 1) / SECTOR_COUNT) + 1
+            local pageIndex = mode == "panels" and number or #categoryPages + 1
+            table.insert(categoryPages, pageIndex, {
+                mode = mode,
+                first = first,
+                entries = entries,
+                count = math.min(SECTOR_COUNT, #entries - first + 1),
+                title = ("%s  %d / %d"):format(PANEL_MODES[mode].title, number, pageCount),
+            })
+        end
+    end
+    table.insert(categoryPages, professionPage)
 end
 
 local function RefreshVisibleFavorites()
     visibleFavorites = {}
     for _, entry in ipairs(favorites) do
-        if GetEntryData(entry.mode, entry.index) then
+        if GetEntryData(entry.mode, entry.index) and not IsEntryHidden(entry.mode, entry.index) then
             table.insert(visibleFavorites, entry)
         end
     end
 end
 
+local function RefreshProfessionPage()
+    professionPage.entries = GetVisibleEntryIDs("professions")
+    professionPage.count = #professionPage.entries
+end
+
 local function RefreshProfessions()
     learnedProfessions = ReadLearnedProfessions(GetProfessions())
-    professionPage.count = #learnedProfessions
     professionsBySkillLine = {}
     for _, entry in ipairs(learnedProfessions) do
         professionsBySkillLine[entry.skillLine] = entry
     end
+    RefreshProfessionPage()
     RefreshVisibleFavorites()
 end
 
@@ -407,14 +449,12 @@ end
 local function GetSectorEntry(sector)
     if not sector or sector < 1 or sector > currentPage.count then return end
     local mode = currentPage.mode
-    if mode == "professions" then
-        local entry = learnedProfessions[sector]
-        return mode, entry.skillLine, entry
-    end
-    local index = currentPage.first + sector - 1
+    local index = (currentPage.first or 1) + sector - 1
     if mode == "favorites" then
         local entry = visibleFavorites[index]
         mode, index = entry.mode, entry.index
+    else
+        index = currentPage.entries[index]
     end
     return mode, index, GetEntryData(mode, index)
 end
@@ -494,37 +534,12 @@ local function ExecuteAction(mode, index, data, fromMouse)
     else
         local message = GetCustomMessage(mode, index) or data.action
         local channel = data.actionType == "say" and "SAY" or "PARTY"
+        if channel == "PARTY" and not IsInGroup() then
+            print("EmotePanel: Join a group to send a party message.")
+            return
+        end
         C_ChatInfo.SendChatMessage(message, channel)
     end
-end
-
-local function RefreshListContent(helpPanel)
-    local scrollFrame = helpPanel.scrollFrame
-    local content = scrollFrame.content
-    local rowIndex, y = 0, 0
-
-    for _, mode in ipairs(modeOrder) do
-        local header = content.headers[mode]
-        header:SetPoint("TOPLEFT", 0, -y)
-        y = y + 24
-
-        for i, data in ipairs(PANEL_MODES[mode].list) do
-            rowIndex = rowIndex + 1
-            local row = content.rows[rowIndex]
-            row:SetPoint("TOPLEFT", 0, -y)
-            row:SetWidth(content:GetWidth())
-            if data.actionType == "panel" then
-                row:SetText(data.name)
-            else
-                local customName = GetCustomButtonName(mode, i)
-                local customMsg = GetCustomMessage(mode, i)
-                row:SetText((customName or data.name) .. " - " .. (customMsg or data.action) .. (customMsg and " *" or ""))
-            end
-            y = y + row:GetStringHeight() + 6
-        end
-        y = y + 12
-    end
-    content:SetHeight(y)
 end
 
 StaticPopupDialogs["EMOTEPANEL_RESET_BUTTON"] = {
@@ -541,7 +556,7 @@ StaticPopupDialogs["EMOTEPANEL_RESET_BUTTON"] = {
             end
 
             SaveEntryIcon(data.mode, data.index, nil)
-            EmotePanel:RefreshWheel()
+            if EmotePanel.frame:IsShown() then EmotePanel:RefreshWheel() end
 
             if data.dialog then
                 data.dialog:Hide()
@@ -563,7 +578,7 @@ StaticPopupDialogs["EMOTEPANEL_RESET_BUTTON"] = {
 }
 
 StaticPopupDialogs["EMOTEPANEL_RESET_ALL"] = {
-    text = "Reset all custom names, messages, commands, and icons?",
+    text = "Reset icon and text overrides? Added entries and visibility choices are kept.",
     button1 = "Yes",
     button2 = "No",
     OnAccept = function()
@@ -571,7 +586,7 @@ StaticPopupDialogs["EMOTEPANEL_RESET_ALL"] = {
         EmotePanelSavedVars.customButtonNames = {}
         EmotePanelSavedVars.customIcons = {}
 
-        if EmotePanel.frame then
+        if EmotePanel.frame and EmotePanel.frame:IsShown() then
             EmotePanel:RefreshWheel()
         end
 
@@ -924,6 +939,9 @@ local function CreateCustomMessageDialog()
     local editHint = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     editHint:SetPoint("BOTTOM", 0, 52)
     editHint:SetText("Y / Triangle: Choose Icon    A / Cross: Save")
+    dialog.errorText = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    dialog.errorText:SetPoint("BOTTOM", 0, 72)
+    dialog.errorText:SetTextColor(1, 0.4, 0.4)
 
     local saveButton = CreateTextButton(dialog, "Save")
     saveButton:SetSize(86, 28)
@@ -975,7 +993,7 @@ local function SectorAt(x, y)
 end
 
 local function HasEditableText(data)
-    return data.actionType == "say" or data.actionType == "party" or data.actionType == "command"
+    return data.custom or data.actionType == "say" or data.actionType == "party" or data.actionType == "command"
 end
 
 local function GetEntryName(mode, index, data)
@@ -1019,28 +1037,61 @@ function EmotePanel:Select(index)
     self:RefreshGamepadHint()
 end
 
-function EmotePanel:EditButton(mode, index, data)
+function EmotePanel:EditButton(mode, index, data, fromSettings)
     if not self.customMessageDialog then
         self.customMessageDialog = CreateCustomMessageDialog()
     end
 
     local dialog = self.customMessageDialog
+    dialog.fromSettings = fromSettings
+    local creating = index == nil
+    if creating then
+        local config = customEntryTypes[mode]
+        data = { name = "", action = "", icon = config.icon, actionType = config.actionType, custom = true }
+    end
     local editableText = HasEditableText(data)
-    dialog:SetHeight(editableText and 278 or 165)
+    dialog:SetHeight(data.custom and 306 or editableText and 278 or 165)
     dialog.nameBox:SetShown(editableText)
     dialog.nameBox.label:SetShown(editableText)
     dialog.messageBox:SetShown(editableText)
     dialog.messageBox.label:SetShown(editableText)
+    dialog.messageBox.label:SetText(data.actionType == "emote" and "Emote (e.g. /wave)"
+        or data.actionType == "command" and "Slash command" or "Message")
+    dialog.resetButton:SetShown(not data.custom)
     dialog.iconButton:SetPoint("TOP", 20, editableText and -180 or -60)
     local previousName = GetEntryName(mode, index, data)
     local previousMessage = editableText and (GetCustomMessage(mode, index) or data.action) or ""
     dialog.nameBox:SetText(previousName)
     dialog.messageBox:SetText(previousMessage)
-    dialog.defaultIcon = GetIconPath(data.icon)
+    dialog.defaultIcon = GetIconPath(data.custom and customEntryTypes[mode].icon or data.icon)
     dialog.pendingIcon = GetEntryIcon(mode, index, data)
     SetIconTexture(dialog.icon, dialog.pendingIcon)
     dialog.saveButton:SetScript("OnClick", function()
-        if editableText then
+        if data.custom then
+            local name = dialog.nameBox:GetText():match("^%s*(.-)%s*$")
+            local action = dialog.messageBox:GetText():match("^%s*(.-)%s*$")
+            if name == "" or action == "" then
+                dialog.errorText:SetText("Enter a name and text.")
+                return
+            end
+            if mode == "emotes" then
+                action = action:gsub("^/+", "")
+                if not (hash_EmoteTokenList and hash_EmoteTokenList["/" .. action:upper()]) then
+                    dialog.errorText:SetText("Enter a WoW emote such as /wave.")
+                    return
+                end
+            elseif mode == "commands" and not action:match("^/[^/%s]") then
+                dialog.errorText:SetText("Start the command with /.")
+                return
+            end
+            data.name, data.action, data.icon = name, action, dialog.pendingIcon
+            if creating then
+                local entries = EmotePanelSavedVars.entries
+                entries[mode] = entries[mode] or {}
+                table.insert(entries[mode], data)
+                self:RefreshEntryPages()
+            end
+        elseif editableText then
             local name = dialog.nameBox:GetText()
             local message = dialog.messageBox:GetText()
             if name ~= "" and message ~= "" then
@@ -1052,12 +1103,15 @@ function EmotePanel:EditButton(mode, index, data)
                 end
             end
         end
-        SaveEntryIcon(mode, index, dialog.pendingIcon ~= dialog.defaultIcon and dialog.pendingIcon or nil)
-        self:RefreshWheel()
+        if not data.custom then
+            SaveEntryIcon(mode, index, dialog.pendingIcon ~= dialog.defaultIcon and dialog.pendingIcon or nil)
+        end
+        if self.frame:IsShown() then self:RefreshWheel() end
         local helpPanel = _G[AddonName .. "HelpPanel"]
         if helpPanel and helpPanel:IsVisible() then helpPanel:refresh() end
         dialog:Hide()
     end)
+    dialog.errorText:SetText("")
     dialog.resetButton:SetScript("OnClick", function()
         StaticPopup_Show("EMOTEPANEL_RESET_BUTTON", nil, nil, {
             mode = mode,
@@ -1196,14 +1250,14 @@ function EmotePanel:CreateWheel()
             and self:CanUseWheel() then
             mouseDownButton = mouseButton
             mouseDownSector = SectorUnderCursor(GetCursorPosition())
-            mouseDownPage = currentPageIndex
+            mouseDownPage = currentPage
         end
     end)
     local function FinishClick(mouseButton)
         if mouseButton ~= mouseDownButton then return end
         local pressedSector, pressedPage = mouseDownSector, mouseDownPage
         mouseDownButton, mouseDownSector, mouseDownPage = nil, nil, nil
-        if not pressedSector or pressedPage ~= currentPageIndex or not self:CanUseWheel() then return end
+        if not pressedSector or pressedPage ~= currentPage or not self:CanUseWheel() then return end
         local index = SectorUnderCursor(GetCursorPosition())
         if index == pressedSector then
             self:ActivateSector(index, mouseButton, true)
@@ -1238,7 +1292,11 @@ function EmotePanel:RefreshWheel(selection)
         self:Select(math.min(nextSelection, currentPage.count))
     else
         self.highlight:Hide()
-        self.selectionName:SetText(currentPage.mode == "professions" and "No learned professions" or "No favorites")
+        local emptyText = "No favorites"
+        if currentPage.mode == "professions" then
+            emptyText = #learnedProfessions > 0 and "No visible professions" or "No learned professions"
+        end
+        self.selectionName:SetText(emptyText)
         self.messagePreview:SetText("")
         self:RefreshGamepadHint()
     end
@@ -1359,6 +1417,13 @@ function EmotePanel:ShowPage(index, selection)
     self.titleText:SetText(currentPage.title)
     if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
     self:RefreshWheel(selection)
+end
+
+function EmotePanel:RefreshEntryPages()
+    BuildCategoryPages()
+    RefreshProfessionPage()
+    RefreshVisibleFavorites()
+    self:ShowPage(1, 1)
 end
 
 function EmotePanel:CycleMode(direction)
@@ -1505,8 +1570,11 @@ end
 function EmotePanel:Initialize()
     EmotePanelSavedVars = EmotePanelSavedVars or {}
     EmotePanelSavedVars.customIcons = EmotePanelSavedVars.customIcons or {}
+    EmotePanelSavedVars.entries = EmotePanelSavedVars.entries or {}
+    EmotePanelSavedVars.hiddenEntries = EmotePanelSavedVars.hiddenEntries or {}
     LoadFavorites()
     RefreshProfessions()
+    BuildCategoryPages()
     currentPageIndex = 1
     currentPage = GetPage(1)
 
@@ -1530,42 +1598,119 @@ end
 
 local function CreateHelpPanel(mainPanel)
     local helpPanel = CreateFrame("Frame", AddonName .. "HelpPanel", mainPanel)
-    helpPanel.name = "List"
+    helpPanel.name = "Entries"
     helpPanel.parent = AddonName
 
     local helpTitle = helpPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     helpTitle:SetPoint("TOPLEFT", 16, -16)
     helpTitle:SetText("Wheel Entry List")
 
+    local description = helpPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    description:SetPoint("TOPLEFT", helpTitle, "BOTTOMLEFT", 0, -8)
+    description:SetText("Uncheck an entry to hide it from the wheel, including Favorites.")
+
+    local previousButton
+    for _, mode in ipairs(modeOrder) do
+        local config = customEntryTypes[mode]
+        if config then
+            local button = CreateTextButton(helpPanel, "Add " .. config.label)
+            button:SetSize(92, 25)
+            if previousButton then
+                button:SetPoint("LEFT", previousButton, "RIGHT", 6, 0)
+            else
+                button:SetPoint("TOPLEFT", description, "BOTTOMLEFT", 0, -10)
+            end
+            button:SetScript("OnClick", function() EmotePanel:EditButton(mode, nil, nil, true) end)
+            previousButton = button
+        end
+    end
+
     -- Create and store scroll frame reference both locally and globally
     local scrollFrame = CreateFrame("ScrollFrame", AddonName .. "ListScrollFrame", helpPanel,
         "MinimalScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", helpTitle, "BOTTOMLEFT", 0, -20)
+    scrollFrame:SetPoint("TOPLEFT", description, "BOTTOMLEFT", 0, -47)
     scrollFrame:SetPoint("BOTTOMRIGHT", helpPanel, "BOTTOMRIGHT", -30, 20)
 
     helpPanel.scrollFrame = scrollFrame
     local content = CreateFrame("Frame", nil, scrollFrame)
-    content.headers = {}
-    content.rows = {}
+    local headers, rows = {}, {}
     scrollFrame.content = content
     scrollFrame:SetScrollChild(content)
 
-    for _, mode in ipairs(modeOrder) do
+    local listModes = { unpack(modeOrder) }
+    table.insert(listModes, "professions")
+    for _, mode in ipairs(listModes) do
         local header = content:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        header:SetText(PANEL_MODES[mode].title)
-        content.headers[mode] = header
-        for _ in ipairs(PANEL_MODES[mode].list) do
-            local row = content:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-            row:SetJustifyH("LEFT")
-            table.insert(content.rows, row)
-        end
+        header:SetText(mode == "professions" and professionPage.title or PANEL_MODES[mode].title)
+        headers[mode] = header
+        rows[mode] = {}
     end
 
-    helpPanel.refresh = function(self)
-        content:SetWidth(scrollFrame:GetWidth())
-        RefreshListContent(self)
+    local function CreateEntryRow(mode, index)
+        local row = CreateFrame("Frame", nil, content)
+        local check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+        check:SetSize(24, 24)
+        check:SetPoint("LEFT")
+        check:SetScript("OnClick", function(self)
+            local hidden = EmotePanelSavedVars.hiddenEntries
+            hidden[mode] = hidden[mode] or {}
+            hidden[mode][index] = not self:GetChecked() or nil
+            EmotePanel:RefreshEntryPages()
+        end)
+        row.check = check
+        row.label = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        row.label:SetJustifyH("LEFT")
+        row.label:SetWordWrap(true)
+        row.label:SetPoint("LEFT", check, "RIGHT", 4, 0)
+        local edit = CreateTextButton(row, "Edit")
+        edit:SetSize(54, 24)
+        edit:SetPoint("RIGHT")
+        edit:SetScript("OnClick", function()
+            local data = GetEntryData(mode, index)
+            if data then EmotePanel:EditButton(mode, index, data, true) end
+        end)
+        return row
     end
-    helpPanel:SetScript("OnShow", helpPanel.refresh)
+
+    helpPanel.refresh = function()
+        local width = scrollFrame:GetWidth()
+        content:SetWidth(width)
+        local y = 0
+        for _, mode in ipairs(listModes) do
+            headers[mode]:SetPoint("TOPLEFT", 0, -y)
+            y = y + 24
+            local modeRows = rows[mode]
+            for _, row in pairs(modeRows) do row:Hide() end
+            ForEachEntry(mode, function(index, data)
+                local row = modeRows[index]
+                if not row then
+                    row = CreateEntryRow(mode, index)
+                    modeRows[index] = row
+                end
+                row:SetPoint("TOPLEFT", 0, -y)
+                row:SetWidth(width)
+                row.label:SetWidth(math.max(1, width - 90))
+                local preview = GetEntryPreview(mode, index, data):gsub("\n", " · ")
+                local name = GetEntryName(mode, index, data)
+                local label = name .. "  ·  " .. preview
+                row.label:SetText(label:gsub("|", "||"))
+                row:SetHeight(math.max(28, row.label:GetStringHeight() + 8))
+                row.check:SetChecked(not IsEntryHidden(mode, index))
+                row:Show()
+                y = y + row:GetHeight()
+            end)
+            y = y + 12
+        end
+        content:SetHeight(y)
+    end
+    helpPanel:SetScript("OnShow", function(self)
+        if not EmotePanel.frame:IsShown() then RefreshProfessions() end
+        self:refresh()
+    end)
+    helpPanel:SetScript("OnHide", function()
+        local dialog = EmotePanel.customMessageDialog
+        if dialog and dialog.fromSettings then dialog:Hide() end
+    end)
     scrollFrame:HookScript("OnSizeChanged", function()
         if helpPanel:IsVisible() then
             helpPanel:refresh()
@@ -1598,8 +1743,8 @@ local function CreateCustomizationPanel(mainPanel)
     instructions3:SetPoint("TOPLEFT", instructions2, "BOTTOMLEFT", 0, -8)
     instructions3:SetText("Built-in commands use WoW actions. Custom slash commands use chat.")
 
-    -- Add button to reset all custom entries.
-    local resetCustomButton = CreateTextButton(customizationPanel, "Reset All Custom Entries")
+    -- Reset overrides separately from added entries.
+    local resetCustomButton = CreateTextButton(customizationPanel, "Reset Overrides")
     resetCustomButton:SetSize(200, 26)
     resetCustomButton:SetPoint("TOPLEFT", instructions3, "BOTTOMLEFT", 0, -10)
 
@@ -1665,8 +1810,8 @@ local function ShowHelp()
     print("  X/Square or middle-click: add or remove a favorite. The wheel opens on Favorites.")
     print("  Game Panels follows Favorites. Panel shortcuts and learned professions can be favorited.")
     print("  /ep config - Open settings panel")
-    print("  /ep reset - Reset all custom entries")
-    print("  /ep list - Show wheel entry list")
+    print("  /ep reset - Reset icon and text overrides")
+    print("  /ep list - Show, hide, edit, or add wheel entries")
 end
 
 local function HandleSlashCommand(msg)
@@ -1707,11 +1852,14 @@ local function OnEvent(self, event, ...)
         EmotePanel:SetupGamepad()
         self:UnregisterEvent(event)
     elseif event == "SKILL_LINES_CHANGED" then
+        local helpPanel = _G[AddonName .. "HelpPanel"]
+        local listShown = helpPanel and helpPanel:IsVisible()
         if EmotePanel.frame:IsShown() then
             local mode, slot = GetSectorEntry(EmotePanel.selected)
             local previousPageCount = FavoritePageCount()
             local wasFavoritePage = currentPage.mode == "favorites"
             RefreshProfessions()
+            if listShown then helpPanel:refresh() end
             local pageCount = FavoritePageCount()
             local page = currentPageIndex + pageCount - previousPageCount
             if wasFavoritePage then
@@ -1723,14 +1871,17 @@ local function OnEvent(self, event, ...)
                     end
                 end
             elseif currentPage == professionPage then
-                for sector, entry in ipairs(learnedProfessions) do
-                    if entry.skillLine == slot then
+                for sector, skillLine in ipairs(professionPage.entries) do
+                    if skillLine == slot then
                         EmotePanel:ShowPage(page, sector)
                         return
                     end
                 end
             end
             EmotePanel:ShowPage(page)
+        elseif listShown then
+            RefreshProfessions()
+            helpPanel:refresh()
         end
     elseif event == "ADDON_LOADED" and select(1, ...) == AddonName then
         EmotePanel:Initialize()
