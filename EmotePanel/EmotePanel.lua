@@ -296,6 +296,7 @@ PANEL_MODES.panels = {
         { name = "Calendar", icon = "atlas:gamepad-radial-icon-calendar", open = function() ToggleCalendar() end },
         { name = "Friends", icon = "atlas:gamepad-radial-icon-social", open = function() ToggleFriendsFrame(FRIEND_TAB_FRIENDS) end },
         { name = "Inventory", icon = "atlas:gamepad-radial-icon-bags", open = function() ToggleAllBags() end },
+        { name = "World Map", icon = "inv_misc_map02", open = function() ToggleWorldMap() end },
     },
 }
 for _, entry in ipairs(PANEL_MODES.panels.list) do
