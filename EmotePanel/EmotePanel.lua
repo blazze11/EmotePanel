@@ -2454,33 +2454,37 @@ local function CreatePositionControls(panel, anchor)
 
     local description = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     description:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -5)
-    description:SetText("Offsets from screen center. Positive X moves right, positive Y moves up.\nYou can also drag the wheel by its header.")
+    description:SetJustifyH("LEFT")
+    description:SetText("Offsets from screen center. Dragging the wheel also saves its position.")
 
     local controls = CreateFrame("Frame", nil, panel)
-    controls:SetSize(420, 26)
+    controls:SetSize(420, 44)
     controls:SetPoint("TOPLEFT", description, "BOTTOMLEFT", 0, -8)
-    local function CreateOffsetBox(axis, x)
+    local function CreateOffsetBox(axis, labelText, x)
         local label = controls:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        label:SetPoint("LEFT", x, 0)
-        label:SetText(axis)
-        local box = CreateFrame("EditBox", AddonName .. "Position" .. axis, controls, "InputBoxScriptTemplate")
-        box:SetSize(68, 24)
-        box:SetPoint("LEFT", label, "RIGHT", 8, 0)
+        label:SetPoint("TOPLEFT", x, 0)
+        label:SetText(labelText)
+        local box = CreateFrame("EditBox", AddonName .. "Position" .. axis, controls, "InputBoxTemplate")
+        box:SetSize(90, 24)
+        box:SetPoint("BOTTOMLEFT", controls, "BOTTOMLEFT", x + 5, 0)
         box:SetFontObject(GameFontHighlight)
+        box:SetJustifyH("CENTER")
+        box:SetTextInsets(6, 6, 0, 0)
         box:SetAutoFocus(false)
         box:SetMaxLetters(12)
         return box
     end
-    local xBox, yBox = CreateOffsetBox("X", 0), CreateOffsetBox("Y", 104)
+    local xBox = CreateOffsetBox("X", "Horizontal (X)", 0)
+    local yBox = CreateOffsetBox("Y", "Vertical (Y)", 112)
     local status = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     status:SetPoint("TOPLEFT", controls, "BOTTOMLEFT", 0, -6)
-    status:SetText(" ")
+    status:SetJustifyH("LEFT")
 
     function panel:refreshPosition()
         local x, y = EmotePanel:GetPositionOffsets()
         xBox:SetText(("%.1f"):format(x))
         yBox:SetText(("%.1f"):format(y))
-        status:SetText(" ")
+        status:SetText("Positive X moves right. Positive Y moves up.")
     end
 
     local function Apply()
@@ -2504,7 +2508,7 @@ local function CreatePositionControls(panel, anchor)
     end
     local apply = CreateTextButton(controls, "Apply")
     apply:SetSize(64, 24)
-    apply:SetPoint("LEFT", 208, 0)
+    apply:SetPoint("BOTTOMLEFT", 224, 0)
     apply:SetScript("OnClick", Apply)
 
     local reset = CreateTextButton(controls, "Reset Position")
@@ -2533,15 +2537,16 @@ local function CreateInterfaceOptions()
     -- Description
     local description = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     description:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-    description:SetText("Open with /ep or bind Open or Close Emote Panel in Keybindings.\nAim either stick or use the D-pad. A/Cross uses the selection, LB/RB pages,\nand B/Circle goes back or closes the wheel.")
+    description:SetJustifyH("LEFT")
+    description:SetText("Open with /ep or set a shortcut in Keybindings → Emote Panel.\nAim either stick or use the D-pad. A/Cross activates, LB/RB changes pages,\nand B/Circle goes back or closes the wheel.")
 
-    local guide = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    guide:SetPoint("TOPLEFT", description, "BOTTOMLEFT", 0, -12)
-    guide:SetText("Categories lets you start on a wheel of category shortcuts and arrange its segments.\nWith Category Wheel off, the wheel opens on Favorites.\nEntries lets you show, hide, reorder, or edit actions and add saved WoW macros.\nCustomization explains icon and text editing and lets you reset overrides.")
+    local behavior = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    behavior:SetPoint("TOPLEFT", description, "BOTTOMLEFT", 0, -16)
+    behavior:SetText("Wheel behavior")
 
     local closeCheck = CreateFrame("CheckButton", nil, mainPanel, "UICheckButtonTemplate")
     closeCheck:SetSize(24, 24)
-    closeCheck:SetPoint("TOPLEFT", guide, "BOTTOMLEFT", 0, -12)
+    closeCheck:SetPoint("TOPLEFT", behavior, "BOTTOMLEFT", 0, -5)
     closeCheck:SetScript("OnClick", function(self)
         EmotePanelSavedVars.closePanelAfterAction = not not self:GetChecked()
     end)
@@ -2551,15 +2556,39 @@ local function CreateInterfaceOptions()
 
     local closeHelp = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     closeHelp:SetPoint("TOPLEFT", closeCheck, "BOTTOMLEFT", 0, -4)
-    closeHelp:SetText("Enabled by default. Uncheck it to keep the wheel open after most actions.")
+    closeHelp:SetText("Uncheck to keep the wheel open after most actions.")
 
     local positionStatus = CreatePositionControls(mainPanel, closeHelp)
     local customizationPanel = CreateCustomizationPanel(mainPanel)
     local helpPanel = CreateHelpPanel(mainPanel)
     local categoriesPanel = CreateCategoriesPanel(mainPanel)
 
+    local pagesTitle = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    pagesTitle:SetPoint("TOPLEFT", positionStatus, "BOTTOMLEFT", 0, -14)
+    pagesTitle:SetText("More settings")
+    local pageLinks = {
+        {"categories", "Categories", "Enable Category Wheel and arrange its segments.\nWith it off, the wheel opens on Favorites."},
+        {"help", "Entries", "Show, hide, reorder, and edit actions.\nChoose saved WoW macros to add to the wheel."},
+        {"customization", "Customization", "Learn how to edit icons and text or reset overrides."},
+    }
+    local previous = pagesTitle
+    for _, page in ipairs(pageLinks) do
+        local button = CreateTextButton(mainPanel, page[2])
+        button:SetSize(120, 24)
+        button:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, previous == pagesTitle and -7 or -8)
+        button:SetScript("OnClick", function()
+            EmotePanel.frame:Hide()
+            Settings.OpenToCategory(categoryIDs[page[1]])
+        end)
+        local help = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        help:SetPoint("LEFT", button, "RIGHT", 12, 0)
+        help:SetJustifyH("LEFT")
+        help:SetText(page[3])
+        previous = button
+    end
+
     local resetTitle = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    resetTitle:SetPoint("TOPLEFT", positionStatus, "BOTTOMLEFT", 0, -12)
+    resetTitle:SetPoint("TOPLEFT", previous, "BOTTOMLEFT", 0, -16)
     resetTitle:SetText("Reset settings")
 
     local resetGeneral = CreateTextButton(mainPanel, "Reset General")
@@ -2604,7 +2633,7 @@ local function CreateInterfaceOptions()
     EmotePanel.settingsCategoryID = category:GetID()
 
     categoryIDs.categories = Settings.RegisterCanvasLayoutSubcategory(category, categoriesPanel, categoriesPanel.name):GetID()
-    Settings.RegisterCanvasLayoutSubcategory(category, customizationPanel, customizationPanel.name)
+    categoryIDs.customization = Settings.RegisterCanvasLayoutSubcategory(category, customizationPanel, customizationPanel.name):GetID()
     local helpCategory = Settings.RegisterCanvasLayoutSubcategory(category, helpPanel, helpPanel.name)
     categoryIDs.help = helpCategory:GetID()
 
