@@ -167,7 +167,7 @@ local PANEL_MODES = {
             { name = "Sigh",     action = "sigh",      actionType = "emote", icon = "Spell_Nature_Sleep" },
             { name = "Sorry",    action = "apologize", actionType = "emote", icon = "Spell_Holy_PrayerOfMendingtga" },
             { name = "Stand",    action = "stand",     actionType = "emote", icon = "Ability_Warrior_SecondWind" },
-            { name = "Talk",     action = "talk",      actionType = "emote", icon = "UI_Chat" },
+            { name = "Talk",     action = "talk",      actionType = "emote", icon = "atlas:gamepad-radial-icon-chat" },
             { name = "Thank",    action = "thank",     actionType = "emote", icon = "INV_Misc_Gift_01" },
             { name = "Threaten", action = "threaten",  actionType = "emote", icon = "Ability_Physical_Taunt_purple" },
             { name = "Wave",     action = "wave",      actionType = "emote", icon = "Spell_Holy_LayOnHands" },
@@ -184,8 +184,8 @@ local PANEL_MODES = {
             { name = "No problem",  action = "No problem! Happy to help!",             actionType = "say", icon = "Spell_Holy_BlessingOfProtection" },
             { name = "BRB",         action = "Be right back, quick break",             actionType = "say", icon = "INV_Misc_PocketWatch_01" },
             { name = "Bye",         action = "Farewell! Have a great adventure!",      actionType = "say", icon = "INV_Garrison_Hearthstone" },
-            { name = "LFG",         action = "Looking for group! Anyone interested?",  actionType = "say", icon = "INV_Misc_GroupLooking" },
-            { name = "Quest",       action = "Anyone working on this quest?",          actionType = "say", icon = "INV_Misc_Book_09" },
+            { name = "LFG",         action = "Looking for group! Anyone interested?",  actionType = "say", icon = "atlas:gamepad-radial-icon-groupfinder" },
+            { name = "Quest",       action = "Anyone working on this quest?",          actionType = "say", icon = "atlas:gamepad-radial-icon-quests" },
             { name = "Gratz",       action = "Congratulations!",                       actionType = "say", icon = "INV_Misc_CelebrationCake_01" },
             { name = "Trade",       action = "Would you like to trade?",               actionType = "say", icon = "INV_Misc_Coin_01" },
         }
@@ -209,7 +209,7 @@ local PANEL_MODES = {
         title = "Commands",
         list = {
             -- Saved commands and favorites refer to these slot numbers. Append new entries.
-            { name = "Invite Target",   action = "invite",     actionType = "command", icon = "INV_Misc_GroupNeedMore",
+            { name = "Invite Target",   action = "invite",     actionType = "command", icon = "atlas:friendslist-invitebutton-default-normal",
                 run = function() RunOnTargetPlayer(C_PartyInfo.InviteUnit) end },
             { name = "Inspect Target",  action = "inspect",    actionType = "command", icon = "INV_Professions_Inscription_ScribesMagnifyingGlass_Gold",
                 run = function() InspectUnit("target") end },
@@ -217,7 +217,7 @@ local PANEL_MODES = {
                 run = function() InitiateTrade("target") end },
             { name = "Follow Target",   action = "follow",     actionType = "command", icon = "Ability_Tracking",
                 run = function() FollowUnit("") end },
-            { name = "Befriend Target", action = "friend",     actionType = "command", icon = "INV_ValentinesCard01",
+            { name = "Befriend Target", action = "friend",     actionType = "command", icon = "atlas:friends-icon-addFriend",
                 run = function()
                     if C_GameRules.IsGameRuleActive(Enum.GameRule.IngameFriendsListDisabled) then return end
                     if not UnitIsHumanPlayer("target") then
@@ -226,15 +226,15 @@ local PANEL_MODES = {
                         RunOnTargetPlayer(C_FriendList.AddOrRemoveFriend)
                     end
                 end },
-            { name = "Roll",            action = "roll",       actionType = "command", icon = "INV_Misc_Dice_02",
+            { name = "Roll",            action = "roll",       actionType = "command", icon = "Interface\\Buttons\\UI-GroupLoot-Dice-Up",
                 run = function() RandomRoll(1, 100) end },
             { name = "Ready Check",     action = "readycheck", actionType = "command", icon = "Interface\\RaidFrame\\ReadyCheck-Ready",
                 run = function()
                     if UnitIsGroupLeader("player") or UnitIsGroupAssistant("player") then C_PartyInfo.DoReadyCheck() end
                 end },
-            { name = "Who",             action = "who",        actionType = "command", icon = "INV_Misc_Spyglass_02",
+            { name = "Who",             action = "who",        actionType = "command", icon = "INV_SideTab_WhoList_c60",
                 run = OpenWho },
-            { name = "Leave Channel",   action = "leave",      actionType = "command", icon = "Spell_Shadow_Teleport",
+            { name = "Leave Channel",   action = "leave",      actionType = "command", icon = "atlas:chatframe-button-icon-voicechat",
                 preview = "Open Chat Channels",
                 run = function() ToggleChannelFrame() end },
             { name = "Reload UI",       action = "reload",     actionType = "command", icon = "INV_Misc_Gear_01" },
@@ -258,20 +258,20 @@ local PANEL_MODES = {
 PANEL_MODES.panels = {
     title = "Game Panels",
     list = {
-        { name = "Character Info", icon = "INV_Chest_Plate01", open = function() EmotePanel:ShowCharacterLauncher() end },
-        { name = "Spellbook", icon = "INV_Misc_Book_09", open = function() PlayerSpellsUtil.ToggleSpellBookFrame() end },
-        { name = "Talents", icon = "Ability_Marksmanship", open = function() PlayerSpellsUtil.ToggleClassTalentOrSpecFrame() end },
+        { name = "Character Info", icon = "atlas:gamepad-radial-icon-character", open = function() EmotePanel:ShowCharacterLauncher() end },
+        { name = "Spellbook", icon = "atlas:gamepad-radial-icon-spellbook", open = function() PlayerSpellsUtil.ToggleSpellBookFrame() end },
+        { name = "Talents", icon = "atlas:gamepad-radial-icon-talents", open = function() PlayerSpellsUtil.ToggleClassTalentOrSpecFrame() end },
         { name = "Legacy", icon = "atlas:gamepad-radial-icon-legacy", open = function() ToggleLegacySystemUI() end },
-        { name = "Quest Log", icon = "INV_Misc_Note_01", open = function() ToggleQuestLog() end },
-        { name = "Guilds & Communities", icon = "INV_Shirt_GuildTabard_01", open = function() ToggleGuildFrame() end },
-        { name = "Group Finder", icon = "Ability_Warrior_RallyingCry", open = function() ToggleGroupFinderFrame() end },
+        { name = "Quest Log", icon = "atlas:gamepad-radial-icon-quests", open = function() ToggleQuestLog() end },
+        { name = "Guilds & Communities", icon = "atlas:gamepad-radial-icon-communities", open = function() ToggleGuildFrame() end },
+        { name = "Group Finder", icon = "atlas:gamepad-radial-icon-groupfinder", open = function() ToggleGroupFinderFrame() end },
         { name = "Account Collections", icon = "atlas:gamepad-radial-icon-collections", open = function() ToggleCollectionsJournal() end },
         { name = "Mounts", icon = "INV_Horse3Saddle008_Chestnut", open = function() ToggleCollectionsJournal(COLLECTIONS_JOURNAL_TAB_INDEX_MOUNTS) end },
         { name = "Pets", icon = "INV_ArfusPet_Classic", open = function() ToggleCollectionsJournal(COLLECTIONS_JOURNAL_TAB_INDEX_PETS) end },
         { name = "Toys", icon = "INV_SideTab_ToyBox_c60", open = function() ToggleCollectionsJournal(COLLECTIONS_JOURNAL_TAB_INDEX_TOYS) end },
-        { name = "Calendar", icon = "INV_Misc_PocketWatch_01", open = function() ToggleCalendar() end },
-        { name = "Friends", icon = "INV_ValentinesCard01", open = function() ToggleFriendsFrame(FRIEND_TAB_FRIENDS) end },
-        { name = "Inventory", icon = "INV_Misc_Bag_08", open = function() ToggleAllBags() end },
+        { name = "Calendar", icon = "atlas:gamepad-radial-icon-calendar", open = function() ToggleCalendar() end },
+        { name = "Friends", icon = "atlas:gamepad-radial-icon-social", open = function() ToggleFriendsFrame(FRIEND_TAB_FRIENDS) end },
+        { name = "Inventory", icon = "atlas:gamepad-radial-icon-bags", open = function() ToggleAllBags() end },
     },
 }
 for _, entry in ipairs(PANEL_MODES.panels.list) do
