@@ -17,6 +17,8 @@ This branch targets **WoW: Forever 1.60.1** (interface `16001`).
 
 ## Controls
 
+<img width="616" height="716" alt="wheel_preview" src="https://github.com/user-attachments/assets/c5234349-ac2c-43ed-b23b-25b30910a1a1" />
+
 Type `/ep` to open the wheel, or assign **Open or Close Emote Panel**
 under **Options → Keybindings → Emote Panel**.
 
@@ -34,6 +36,8 @@ action description appears below it.
 
 ## Customize
 
+<img width="444" height="394" alt="custom_text" src="https://github.com/user-attachments/assets/c54b35a4-1355-4567-88e6-6bc82b51dda9" />
+
 - Open **Settings → AddOns → EmotePanel**, use the **Settings** entry
   on the Commands wheel, or type `/ep config`.
 - Open **Entries** or type `/ep list` to hide, restore, or edit entries.
@@ -43,6 +47,8 @@ action description appears below it.
 - Uncheck **Close panel after action** to keep the wheel open while
   using entries. Settings and the Character Info confirmation close the
   wheel to take focus.
+  
+<img width="596" height="569" alt="custom_icons" src="https://github.com/user-attachments/assets/0f9f0349-ae86-4a17-a7a9-08bb23878c41" />
 
 ## Game actions
 
@@ -56,6 +62,8 @@ select the entry and confirm with a second click or A / Cross. In
 combat, use WoW's Character Info binding or micro menu.
 
 Use `/ep help` for the in-game command list.
+
+<img width="1122" height="908" alt="select_add_edit" src="https://github.com/user-attachments/assets/8e63bb03-e450-4405-8396-edab9ba32f86" />
 
 ## AI assistance
 
