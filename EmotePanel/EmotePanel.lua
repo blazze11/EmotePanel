@@ -1594,7 +1594,7 @@ function EmotePanel:CreateWheel()
         button:SetSize(WHEEL_SIZE, WHEEL_SIZE)
         button:SetFrameStrata("DIALOG")
         button:EnableMouse(true)
-        button:RegisterForClicks("AnyUp")
+        button:RegisterForClicks("AnyDown", "AnyUp")
         button:SetAttribute("useOnKeyDown", false)
         button:SetAttribute("_onshow", [[
             self:SetBindingClick(true, "PAD1", self:GetName(), "WheelActivate")
@@ -1603,16 +1603,28 @@ function EmotePanel:CreateWheel()
         button:SetAttribute("_onstate-combat", [[ if newstate == "combat" then self:Hide() end ]])
         RegisterStateDriver(button, "combat", "[combat] combat; peace")
         SetMouseScripts(button)
-        local clickedSector, ranMacro
-        button:SetScript("PreClick", function(_, input)
+        local clickedSector, ranMacro, controllerPage
+        button:HookScript("OnHide", function() controllerPage = nil end)
+        button:SetScript("PreClick", function(_, input, down)
             clickedSector, ranMacro = nil, false
             if InCombatLockdown() then return end
             button:SetAttribute("type", nil)
             button:SetAttribute("macro", nil)
+            if down then
+                if input == "WheelActivate" then controllerPage = currentPage end
+                return
+            end
+            local pressedPage = controllerPage
+            if input == "WheelActivate" then
+                controllerPage = nil
+                -- The binding has received the release. Resume capturing ordinary input.
+                self.frame:SetPropagateKeyboardInput(false)
+            end
             if not (self.frame:IsShown() and self:CanUseWheel()) then return end
             if input == "LeftButton" then
                 clickedSector = TakeMouseClick(input)
-            elseif input == "WheelActivate" and not IsModifierKeyDown() then
+            elseif input == "WheelActivate" and (not pressedPage or pressedPage == currentPage)
+                and not IsModifierKeyDown() then
                 if GetBindingFromClick("PAD1") == "TOGGLEGAMEMENU" then
                     self.frame:Hide()
                     return
@@ -1913,6 +1925,10 @@ function EmotePanel:SetupGamepad()
     local frame = self.frame
     local pressed = {}
     local activationPage
+    local function PropagateButton(propagate)
+        if not InCombatLockdown() then frame:SetPropagateKeyboardInput(propagate) end
+        return propagate
+    end
     local function CloseForGameMenu() frame:Hide() end
     local function PreviousPage() self:CycleMode(-1) end
     local function NextPage() self:CycleMode(1) end
@@ -1958,21 +1974,22 @@ function EmotePanel:SetupGamepad()
         if key ~= "PAD4" or self.selected then return actions[key] end
     end
     frame:SetScript("OnGamePadButtonDown", function(_, key)
-        if key == "PAD1" and self.macroInput and self.macroInput:IsShown() then return true end
+        if key == "PAD1" and self.macroInput and self.macroInput:IsShown() then return PropagateButton(true) end
         local action = GetAction(key)
-        if not action or (action ~= CloseForGameMenu and IsModifierKeyDown()) then return true end
+        if not action or (action ~= CloseForGameMenu and IsModifierKeyDown()) then return PropagateButton(true) end
         pressed[key] = action
         if action == actions.PAD1 then activationPage = currentPage end
-        return false
+        return PropagateButton(false)
     end)
     frame:SetScript("OnGamePadButtonUp", function(_, key)
         if key == "PAD1" and self.macroInput and self.macroInput:IsShown() then
             pressed[key] = nil
-            return true
+            return PropagateButton(true)
         end
         local action = pressed[key]
-        if not action then return true end
+        if not action then return PropagateButton(true) end
         pressed[key] = nil
+        PropagateButton(false)
         if action == actions.PAD1 and activationPage ~= currentPage then return false end
         if action == GetAction(key) then
             if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
