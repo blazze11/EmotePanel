@@ -1,8 +1,8 @@
 ## Interface: 16001
 ## Title: EmotePanel
-## Notes: Controller-friendly emotes and quick chat for WoW: Forever
+## Notes: Controller wheel for emotes, quick chat, professions, and game panels
 ## Author: Blazze
-## Version: 0.9.0
+## Version: 0.10.0
 ## SavedVariables: EmotePanelSavedVars
 
 EmotePanel.lua

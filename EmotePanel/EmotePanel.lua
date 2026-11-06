@@ -25,6 +25,7 @@ local SELECTION_COLORS = {
     say = { 0.36, 0.84, 1 },
     party = { 0.48, 1, 0.46 },
     command = { 0.82, 0.54, 1 },
+    panel = { 0.42, 0.95, 0.83 },
     profession = { 1, 0.61, 0.32 },
 }
 
@@ -190,14 +191,39 @@ local PANEL_MODES = {
     }
 }
 
-local modeOrder = { "emotes", "chat", "party", "commands" }
+-- Favorites and icon overrides use these slots. Append new shortcuts.
+PANEL_MODES.panels = {
+    title = "Game Panels",
+    list = {
+        { name = "Character Info", icon = "INV_Chest_Plate01", open = function() ToggleCharacter("PaperDollFrame") end },
+        { name = "Spellbook", icon = "INV_Misc_Book_09", open = function() PlayerSpellsUtil.ToggleSpellBookFrame() end },
+        { name = "Talents", icon = "Ability_Marksmanship", open = function() PlayerSpellsUtil.ToggleClassTalentOrSpecFrame() end },
+        { name = "Legacy", icon = "INV_Misc_Trophy_01", open = function() ToggleLegacySystemUI() end },
+        { name = "Quest Log", icon = "INV_Misc_Note_01", open = function() ToggleQuestLog() end },
+        { name = "Guilds & Communities", icon = "INV_Shirt_GuildTabard_01", open = function() ToggleGuildFrame() end },
+        { name = "Group Finder", icon = "Ability_Warrior_RallyingCry", open = function() ToggleGroupFinderFrame() end },
+        { name = "Account Collections", icon = "INV_Misc_Chest_01", open = function() ToggleCollectionsJournal() end },
+        { name = "Mounts", icon = "INV_Horse3Saddle008_Chestnut", open = function() ToggleCollectionsJournal(COLLECTIONS_JOURNAL_TAB_INDEX_MOUNTS) end },
+        { name = "Pets", icon = "INV_ArfusPet_Classic", open = function() ToggleCollectionsJournal(COLLECTIONS_JOURNAL_TAB_INDEX_PETS) end },
+        { name = "Toys", icon = "INV_SideTab_ToyBox_c60", open = function() ToggleCollectionsJournal(COLLECTIONS_JOURNAL_TAB_INDEX_TOYS) end },
+        { name = "Calendar", icon = "INV_Misc_PocketWatch_01", open = function() ToggleCalendar() end },
+        { name = "Friends", icon = "INV_ValentinesCard01", open = function() ToggleFriendsFrame(FRIEND_TAB_FRIENDS) end },
+        { name = "Inventory", icon = "INV_Misc_Bag_08", open = function() ToggleAllBags() end },
+    },
+}
+for _, entry in ipairs(PANEL_MODES.panels.list) do
+    entry.actionType = "panel"
+end
+
+local modeOrder = { "emotes", "chat", "party", "commands", "panels" }
 local categoryPages = {}
 for _, mode in ipairs(modeOrder) do
     local config = PANEL_MODES[mode]
     local pageCount = math.ceil(#config.list / SECTOR_COUNT)
     for first = 1, #config.list, SECTOR_COUNT do
         local number = math.floor((first - 1) / SECTOR_COUNT) + 1
-        table.insert(categoryPages, {
+        local pageIndex = mode == "panels" and number or #categoryPages + 1
+        table.insert(categoryPages, pageIndex, {
             mode = mode,
             first = first,
             count = math.min(SECTOR_COUNT, #config.list - first + 1),
@@ -208,8 +234,9 @@ end
 local professionPage = { mode = "professions", title = "Professions", count = 0 }
 table.insert(categoryPages, professionPage)
 local learnedProfessions = {}
+local professionsBySkillLine = {}
 local currentPageIndex, currentPage
-local favorites
+local favorites, visibleFavorites
 
 local function ReadLearnedProfessions(...)
     local entries, seen = {}, {}
@@ -243,8 +270,33 @@ local function ReadLearnedProfessions(...)
     return entries
 end
 
+local function GetEntryData(mode, index)
+    if mode == "professions" then return professionsBySkillLine[index] end
+    local config = PANEL_MODES[mode]
+    return config and config.list[index]
+end
+
+local function RefreshVisibleFavorites()
+    visibleFavorites = {}
+    for _, entry in ipairs(favorites) do
+        if GetEntryData(entry.mode, entry.index) then
+            table.insert(visibleFavorites, entry)
+        end
+    end
+end
+
+local function RefreshProfessions()
+    learnedProfessions = ReadLearnedProfessions(GetProfessions())
+    professionPage.count = #learnedProfessions
+    professionsBySkillLine = {}
+    for _, entry in ipairs(learnedProfessions) do
+        professionsBySkillLine[entry.skillLine] = entry
+    end
+    RefreshVisibleFavorites()
+end
+
 local function FavoritePageCount()
-    return math.max(1, math.ceil(#favorites / SECTOR_COUNT))
+    return math.max(1, math.ceil(#visibleFavorites / SECTOR_COUNT))
 end
 
 local function GetPage(index)
@@ -254,7 +306,7 @@ local function GetPage(index)
     return {
         mode = "favorites",
         first = first,
-        count = math.min(SECTOR_COUNT, #favorites - first + 1),
+        count = math.min(SECTOR_COUNT, #visibleFavorites - first + 1),
         title = count == 1 and "Favorites" or ("Favorites  %d / %d"):format(index, count),
     }
 end
@@ -270,9 +322,13 @@ local function LoadFavorites()
     favorites = {}
     if type(saved) == "table" then
         for _, entry in ipairs(saved) do
-            local mode = type(entry) == "table" and PANEL_MODES[entry.mode]
-            if mode and mode.list[entry.index] and not FindFavorite(entry.mode, entry.index) then
-                table.insert(favorites, { mode = entry.mode, index = entry.index })
+            if type(entry) == "table" then
+                -- Keep profession favorites across characters and temporary unlearning.
+                local valid = GetEntryData(entry.mode, entry.index) or
+                    (entry.mode == "professions" and type(entry.index) == "number" and entry.index > 0 and entry.index % 1 == 0)
+                if valid and not FindFavorite(entry.mode, entry.index) then
+                    table.insert(favorites, { mode = entry.mode, index = entry.index })
+                end
             end
         end
     end
@@ -294,10 +350,10 @@ local function GetSectorEntry(sector)
     end
     local index = currentPage.first + sector - 1
     if mode == "favorites" then
-        local entry = favorites[index]
+        local entry = visibleFavorites[index]
         mode, index = entry.mode, entry.index
     end
-    return mode, index, PANEL_MODES[mode].list[index]
+    return mode, index, GetEntryData(mode, index)
 end
 
 local targetCommands = {
@@ -339,6 +395,7 @@ end
 
 local function GetEntryPreview(mode, index, data)
     if data.actionType == "emote" then return "/" .. data.action end
+    if data.actionType == "panel" then return "Open " .. data.name end
     if data.actionType == "profession" then
         local kind = data.isPrimary and "Primary profession" or "Secondary profession"
         local action = data.canCraft and "Open crafting" or "Open professions overview"
@@ -355,6 +412,9 @@ local function ExecuteAction(mode, index, data)
         local token = hash_EmoteTokenList and hash_EmoteTokenList[alias] or data.action:upper()
         local targetName = not HasLockedTarget() and "none" or nil
         C_ChatInfo.PerformEmote(token, targetName)
+    elseif data.actionType == "panel" then
+        EmotePanel.frame:Hide()
+        data.open()
     elseif data.actionType == "profession" then
         if not ProfessionsFrame_LoadUI() then return end
         EmotePanel.frame:Hide()
@@ -414,11 +474,15 @@ local function RefreshListContent(helpPanel)
         for i, data in ipairs(PANEL_MODES[mode].list) do
             rowIndex = rowIndex + 1
             local row = content.rows[rowIndex]
-            local customName = GetCustomButtonName(mode, i)
-            local customMsg = GetCustomMessage(mode, i)
             row:SetPoint("TOPLEFT", 0, -y)
             row:SetWidth(content:GetWidth())
-            row:SetText((customName or data.name) .. " - " .. (customMsg or data.action) .. (customMsg and " *" or ""))
+            if data.actionType == "panel" then
+                row:SetText(data.name)
+            else
+                local customName = GetCustomButtonName(mode, i)
+                local customMsg = GetCustomMessage(mode, i)
+                row:SetText((customName or data.name) .. " - " .. (customMsg or data.action) .. (customMsg and " *" or ""))
+            end
             y = y + row:GetStringHeight() + 6
         end
         y = y + 12
@@ -829,11 +893,12 @@ local function SectorAt(x, y)
     if index <= currentPage.count then return index end
 end
 
+local function HasEditableText(data)
+    return data.actionType == "say" or data.actionType == "party" or data.actionType == "command"
+end
+
 local function GetEntryName(mode, index, data)
-    if data.actionType == "emote" or data.actionType == "profession" then
-        return data.name
-    end
-    return GetCustomButtonName(mode, index) or data.name
+    return (HasEditableText(data) and GetCustomButtonName(mode, index)) or data.name
 end
 
 local function SetSelectionTint(texture, color)
@@ -879,7 +944,7 @@ function EmotePanel:EditButton(mode, index, data)
     end
 
     local dialog = self.customMessageDialog
-    local editableText = data.actionType ~= "emote" and data.actionType ~= "profession"
+    local editableText = HasEditableText(data)
     dialog:SetHeight(editableText and 278 or 165)
     dialog.nameBox:SetShown(editableText)
     dialog.nameBox.label:SetShown(editableText)
@@ -1012,10 +1077,8 @@ function EmotePanel:CreateWheel()
         GameTooltip:SetText(GetEntryName(mode, slot, data))
         GameTooltip:AddLine(GetEntryPreview(mode, slot, data), 1, 1, 1, true)
         GameTooltip:AddLine("Right-click to edit", 0.7, 0.7, 0.7)
-        if mode ~= "professions" then
-            local favoriteHint = FindFavorite(mode, slot) and "Middle-click to remove favorite" or "Middle-click to favorite"
-            GameTooltip:AddLine(favoriteHint, 0.7, 0.7, 0.7)
-        end
+        local favoriteHint = FindFavorite(mode, slot) and "Middle-click to remove favorite" or "Middle-click to favorite"
+        GameTooltip:AddLine(favoriteHint, 0.7, 0.7, 0.7)
         GameTooltip:Show()
     end
     local function StopMouseSelection()
@@ -1149,7 +1212,10 @@ function EmotePanel:CreateControls()
     self.messagePreview:SetJustifyH("CENTER")
     self.messagePreview:SetWordWrap(true)
     self.messagePreview:SetNonSpaceWrap(true)
-    frame:HookScript("OnShow", function() self:ShowPage(1, 1) end)
+    frame:HookScript("OnShow", function()
+        RefreshProfessions()
+        self:ShowPage(1, 1)
+    end)
     if InputDeviceIconSetManager then
         InputDeviceIconSetManager:RegisterActiveInputDeviceIconSetUpdatedCallback(self.RefreshGamepadHint, self)
     end
@@ -1174,14 +1240,14 @@ function EmotePanel:RefreshGamepadHint()
         .. GamepadGlyph("PADLSHOULDER", "LB") .. " " .. GamepadGlyph("PADRSHOULDER", "RB") .. " Page")
     local mode, slot, data = GetSectorEntry(self.selected)
     local actions
-    if currentPage.mode == "professions" then
-        actions = data and (GamepadGlyph("PAD1", "A") .. " Open    "
-            .. GamepadGlyph("PAD4", "Y") .. " Edit Icon    ") or ""
-    elseif data then
+    if data then
         local favoriteAction = FindFavorite(mode, slot) and "Unfavorite" or "Favorite"
-        actions = GamepadGlyph("PAD1", "A") .. " Use    "
+        local primaryAction = (data.actionType == "profession" or data.actionType == "panel") and "Open" or "Use"
+        actions = GamepadGlyph("PAD1", "A") .. " " .. primaryAction .. "    "
             .. GamepadGlyph("PAD3", "X") .. " " .. favoriteAction .. "    "
-        actions = actions .. GamepadGlyph("PAD4", "Y") .. " Edit    "
+            .. GamepadGlyph("PAD4", "Y") .. " Edit    "
+    elseif currentPage == professionPage then
+        actions = ""
     else
         actions = "Browse pages and press " .. GamepadGlyph("PAD3", "X") .. " to add    "
     end
@@ -1191,10 +1257,6 @@ end
 function EmotePanel:ShowPage(index, selection)
     currentPageIndex = index
     currentPage = GetPage(index)
-    if currentPage == professionPage then
-        learnedProfessions = ReadLearnedProfessions(GetProfessions())
-        professionPage.count = #learnedProfessions
-    end
     self.titleText:SetText(currentPage.title)
     if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
     self:RefreshWheel(selection)
@@ -1207,7 +1269,7 @@ end
 
 function EmotePanel:ToggleFavorite()
     local mode, slot, data = GetSectorEntry(self.selected)
-    if not data or mode == "professions" then return end
+    if not data then return end
     local previousPageCount = FavoritePageCount()
     local position = FindFavorite(mode, slot)
     if position then
@@ -1215,6 +1277,7 @@ function EmotePanel:ToggleFavorite()
     else
         table.insert(favorites, { mode = mode, index = slot })
     end
+    RefreshVisibleFavorites()
 
     local newPageCount = FavoritePageCount()
     local page = currentPageIndex
@@ -1352,6 +1415,7 @@ function EmotePanel:Initialize()
     EmotePanelSavedVars = EmotePanelSavedVars or {}
     EmotePanelSavedVars.customIcons = EmotePanelSavedVars.customIcons or {}
     LoadFavorites()
+    RefreshProfessions()
     currentPageIndex = 1
     currentPage = GetPage(1)
 
@@ -1382,7 +1446,7 @@ local function CreateHelpPanel(mainPanel)
 
     local helpTitle = helpPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     helpTitle:SetPoint("TOPLEFT", 16, -16)
-    helpTitle:SetText("Emote & Message List")
+    helpTitle:SetText("Wheel Entry List")
 
     -- Create and store scroll frame reference both locally and globally
     local scrollFrame = CreateFrame("ScrollFrame", AddonName .. "ListScrollFrame", helpPanel,
@@ -1505,9 +1569,10 @@ local function ShowHelp()
     print("  Either stick or D-pad up/down: select. LB/RB or D-pad left/right: change page.")
     print("  A/Cross: use. B/Circle: close. Y/Triangle or right-click: edit any sector.")
     print("  X/Square or middle-click: add or remove a favorite. The wheel opens on Favorites.")
+    print("  Game Panels follows Favorites. Panel shortcuts and learned professions can be favorited.")
     print("  /ep config - Open settings panel")
     print("  /ep reset - Reset all custom entries")
-    print("  /ep list - Show emote list panel")
+    print("  /ep list - Show wheel entry list")
 end
 
 local function HandleSlashCommand(msg)
@@ -1548,15 +1613,30 @@ local function OnEvent(self, event, ...)
         EmotePanel:SetupGamepad()
         self:UnregisterEvent(event)
     elseif event == "SKILL_LINES_CHANGED" then
-        if currentPage == professionPage and EmotePanel.frame:IsShown() then
-            local _, skillLine = GetSectorEntry(EmotePanel.selected)
-            EmotePanel:ShowPage(currentPageIndex)
-            for sector, entry in ipairs(learnedProfessions) do
-                if entry.skillLine == skillLine then
-                    EmotePanel:Select(sector)
-                    break
+        if EmotePanel.frame:IsShown() then
+            local mode, slot = GetSectorEntry(EmotePanel.selected)
+            local previousPageCount = FavoritePageCount()
+            local wasFavoritePage = currentPage.mode == "favorites"
+            RefreshProfessions()
+            local pageCount = FavoritePageCount()
+            local page = currentPageIndex + pageCount - previousPageCount
+            if wasFavoritePage then
+                page = math.min(currentPageIndex, pageCount)
+                for position, entry in ipairs(visibleFavorites) do
+                    if entry.mode == mode and entry.index == slot then
+                        EmotePanel:ShowPage(math.floor((position - 1) / SECTOR_COUNT) + 1, (position - 1) % SECTOR_COUNT + 1)
+                        return
+                    end
+                end
+            elseif currentPage == professionPage then
+                for sector, entry in ipairs(learnedProfessions) do
+                    if entry.skillLine == slot then
+                        EmotePanel:ShowPage(page, sector)
+                        return
+                    end
                 end
             end
+            EmotePanel:ShowPage(page)
         end
     elseif event == "ADDON_LOADED" and select(1, ...) == AddonName then
         EmotePanel:Initialize()
