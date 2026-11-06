@@ -295,6 +295,9 @@ for _, entry in ipairs(PANEL_MODES.panels.list) do
 end
 
 local modeOrder = { "emotes", "chat", "party", "commands", "panels" }
+local categoryOrder = { "emotes", "voicedEmotes", "chat", "party", "commands", "panels" }
+local voicedEmoteTitle = "Voiced Emotes"
+local voicedEmoteTokens, nativeEmotes, nativeEmoteIDs = {}, {}, {}
 local customEntryTypes = {
     emotes = { actionType = "emote", icon = "Spell_Misc_EmotionHappy", label = "Emote" },
     chat = { actionType = "say", icon = "atlas:gamepad-radial-icon-chat", label = "Say" },
@@ -307,6 +310,75 @@ local learnedProfessions = {}
 local professionsBySkillLine = {}
 local currentPageIndex, currentPage
 local favorites, visibleFavorites
+
+local function GetStorageMode(category)
+    return category == "voicedEmotes" and "emotes" or category
+end
+
+local function GetEmoteToken(data)
+    if data.token then return data.token end
+    local alias = data.action:upper()
+    return (hash_EmoteTokenList and hash_EmoteTokenList["/" .. alias]) or (alias == "BRAVO" and "APPLAUD") or alias
+end
+
+local function IsFactionEmote(token)
+    return token == "FORTHEALLIANCE" or token == "FORTHEHORDE"
+end
+
+local function LoadNativeEmotes()
+    local labels, existing = {}, {}
+    for index = 1, MAXEMOTEINDEX or 0 do
+        local prefix = "EMOTE" .. index
+        local token = _G[prefix .. "_TOKEN"]
+        if token and not labels[token] then labels[token] = _G[prefix .. "_CMD1"] end
+    end
+    for _, data in ipairs(PANEL_MODES.emotes.list) do existing[GetEmoteToken(data)] = true end
+    for _, token in ipairs(TextEmoteSpeechList or {}) do voicedEmoteTokens[token] = true end
+
+    local icons = {
+        BEG = "INV_Misc_Coin_01", CHICKEN = "INV_Misc_Food_57", EAT = "INV_Misc_Food_15",
+        SHY = "Spell_Misc_EmotionSad", SLEEP = "Spell_Nature_Sleep", LEAN = "Ability_Warrior_SecondWind",
+        HELPME = "Spell_Holy_Resurrection", INCOMING = "Ability_Hunter_MarkedForDeath",
+        CHARGE = "Ability_Warrior_Charge", FLEE = "Ability_Rogue_Sprint",
+        ATTACKMYTARGET = "Ability_Warrior_BattleShout", OOM = "INV_Potion_76",
+        FOLLOW = "Ability_Hunter_Pathfinding", WAIT = "INV_Misc_PocketWatch_02",
+        HEALME = "Spell_Holy_Heal", OPENFIRE = "Ability_Hunter_SniperShot",
+        HELLO = "Spell_Holy_LayOnHands", WELCOME = "Spell_Misc_EmotionHappy",
+        CONGRATULATE = "INV_Misc_CelebrationCake_01", FLIRT = "Spell_Shadow_SoothingKiss",
+        JOKE = "INV_Helm_LaughingSkull_01",
+    }
+    local names = {
+        HELPME = "Help Me", ATTACKMYTARGET = "Attack My Target", OOM = "Out of Mana",
+        FOLLOW = "Follow Me", HEALME = "Heal Me", OPENFIRE = "Open Fire", JOKE = "Silly",
+    }
+    local function AddEmotes(tokens)
+        for _, token in ipairs(tokens) do
+            local faction = IsFactionEmote(token)
+            local id = "native:" .. (faction and "FACTION" or token)
+            if not existing[token] and not nativeEmotes[id] then
+                local action = (labels[token] or token:lower()):gsub("^/", "")
+                nativeEmotes[id] = {
+                    name = faction and "Faction Cheer" or names[token] or (action:gsub("^%l", string.upper)),
+                    action = action,
+                    actionType = "emote",
+                    token = token,
+                    icon = icons[token] or 3750314,
+                }
+                table.insert(nativeEmoteIDs, id)
+            end
+        end
+    end
+    AddEmotes(EmoteList or {})
+    AddEmotes(TextEmoteSpeechList or {})
+    if not nativeEmotes["native:FACTION"] then
+        local faction = UnitFactionGroup("player", true)
+        local token = faction == "Alliance" and "FORTHEALLIANCE" or faction == "Horde" and "FORTHEHORDE"
+        if token then
+            voicedEmoteTokens[token] = true
+            AddEmotes({ token })
+        end
+    end
+end
 
 local function ReadLearnedProfessions(...)
     local entries, seen = {}, {}
@@ -342,6 +414,7 @@ end
 
 local function GetEntryData(mode, index)
     if mode == "professions" then return professionsBySkillLine[index] end
+    if mode == "emotes" and type(index) == "string" then return nativeEmotes[index] end
     local config = PANEL_MODES[mode]
     if config and type(index) == "number" and index < 0 then
         local entries = EmotePanelSavedVars.entries[mode]
@@ -350,13 +423,22 @@ local function GetEntryData(mode, index)
     return config and config.list[index]
 end
 
-local function ForEachEntry(mode, callback)
-    if mode == "professions" then
+local function ForEachEntry(category, callback)
+    if category == "professions" then
         for _, data in ipairs(learnedProfessions) do callback(data.skillLine, data) end
         return
     end
-    for index, data in ipairs(PANEL_MODES[mode].list) do callback(index, data) end
-    for index, data in ipairs(EmotePanelSavedVars.entries[mode] or {}) do callback(-index, data) end
+    local mode = GetStorageMode(category)
+    local function Add(index, data)
+        if mode ~= "emotes" or (voicedEmoteTokens[GetEmoteToken(data)] == true) == (category == "voicedEmotes") then
+            callback(index, data)
+        end
+    end
+    for index, data in ipairs(PANEL_MODES[mode].list) do Add(index, data) end
+    if mode == "emotes" then
+        for _, id in ipairs(nativeEmoteIDs) do Add(id, nativeEmotes[id]) end
+    end
+    for index, data in ipairs(EmotePanelSavedVars.entries[mode] or {}) do Add(-index, data) end
 end
 
 local function IsEntryHidden(mode, index)
@@ -364,18 +446,20 @@ local function IsEntryHidden(mode, index)
     return hidden and hidden[index]
 end
 
-local function GetVisibleEntryIDs(mode)
+local function GetVisibleEntryIDs(category)
     local entries = {}
-    ForEachEntry(mode, function(index)
-        if not IsEntryHidden(mode, index) then table.insert(entries, index) end
+    ForEachEntry(category, function(index)
+        if not IsEntryHidden(GetStorageMode(category), index) then table.insert(entries, index) end
     end)
     return entries
 end
 
 local function BuildCategoryPages()
     wipe(categoryPages)
-    for _, mode in ipairs(modeOrder) do
-        local entries = GetVisibleEntryIDs(mode)
+    for _, category in ipairs(categoryOrder) do
+        local mode = GetStorageMode(category)
+        local title = category == "voicedEmotes" and voicedEmoteTitle or PANEL_MODES[mode].title
+        local entries = GetVisibleEntryIDs(category)
         local pageCount = math.ceil(#entries / SECTOR_COUNT)
         for first = 1, #entries, SECTOR_COUNT do
             local number = math.floor((first - 1) / SECTOR_COUNT) + 1
@@ -385,7 +469,7 @@ local function BuildCategoryPages()
                 first = first,
                 entries = entries,
                 count = math.min(SECTOR_COUNT, #entries - first + 1),
-                title = ("%s  %d / %d"):format(PANEL_MODES[mode].title, number, pageCount),
+                title = ("%s  %d / %d"):format(title, number, pageCount),
             })
         end
     end
@@ -509,8 +593,15 @@ end
 
 local function ExecuteAction(mode, index, data, fromMouse)
     if data.actionType == "emote" then
-        local alias = "/" .. data.action:upper()
-        local token = hash_EmoteTokenList and hash_EmoteTokenList[alias] or data.action:upper()
+        local token = GetEmoteToken(data)
+        if IsFactionEmote(token) then
+            local faction = UnitFactionGroup("player", true)
+            if faction == "Alliance" then
+                token = "FORTHEALLIANCE"
+            elseif faction == "Horde" then
+                token = "FORTHEHORDE"
+            end
+        end
         C_ChatInfo.PerformEmote(token)
     elseif data.actionType == "panel" then
         EmotePanel.frame:Hide()
@@ -1093,16 +1184,20 @@ function EmotePanel:EditButton(mode, index, data, fromSettings)
         if data.custom then
             local name = dialog.nameBox:GetText():match("^%s*(.-)%s*$")
             local action = dialog.messageBox:GetText():match("^%s*(.-)%s*$")
+            local moved
             if name == "" or action == "" then
                 dialog.errorText:SetText("Enter a name and text.")
                 return
             end
             if mode == "emotes" then
                 action = action:gsub("^/+", "")
-                if not (hash_EmoteTokenList and hash_EmoteTokenList["/" .. action:upper()]) then
+                local token = hash_EmoteTokenList and hash_EmoteTokenList["/" .. action:upper()]
+                if not token then
                     dialog.errorText:SetText("Enter a WoW emote such as /wave.")
                     return
                 end
+                moved = voicedEmoteTokens[GetEmoteToken(data)] ~= voicedEmoteTokens[token]
+                data.token = token
             elseif mode == "commands" and not action:match("^/[^/%s]") then
                 dialog.errorText:SetText("Start the command with /.")
                 return
@@ -1112,6 +1207,8 @@ function EmotePanel:EditButton(mode, index, data, fromSettings)
                 local entries = EmotePanelSavedVars.entries
                 entries[mode] = entries[mode] or {}
                 table.insert(entries[mode], data)
+            end
+            if creating or moved then
                 self:RefreshEntryPages()
             end
         elseif editableText then
@@ -1597,6 +1694,7 @@ function EmotePanel:Initialize()
     EmotePanelSavedVars.customIcons = EmotePanelSavedVars.customIcons or {}
     EmotePanelSavedVars.entries = EmotePanelSavedVars.entries or {}
     EmotePanelSavedVars.hiddenEntries = EmotePanelSavedVars.hiddenEntries or {}
+    LoadNativeEmotes()
     LoadFavorites()
     RefreshProfessions()
     BuildCategoryPages()
@@ -1662,11 +1760,12 @@ local function CreateHelpPanel(mainPanel)
     scrollFrame.content = content
     scrollFrame:SetScrollChild(content)
 
-    local listModes = { unpack(modeOrder) }
+    local listModes = { unpack(categoryOrder) }
     table.insert(listModes, "professions")
     for _, mode in ipairs(listModes) do
         local header = content:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        header:SetText(mode == "professions" and professionPage.title or PANEL_MODES[mode].title)
+        header:SetText(mode == "professions" and professionPage.title
+            or mode == "voicedEmotes" and voicedEmoteTitle or PANEL_MODES[mode].title)
         headers[mode] = header
         rows[mode] = {}
     end
@@ -1702,6 +1801,7 @@ local function CreateHelpPanel(mainPanel)
         content:SetWidth(width)
         local y = 0
         for _, mode in ipairs(listModes) do
+            local storageMode = GetStorageMode(mode)
             headers[mode]:SetPoint("TOPLEFT", 0, -y)
             y = y + 24
             local modeRows = rows[mode]
@@ -1709,18 +1809,18 @@ local function CreateHelpPanel(mainPanel)
             ForEachEntry(mode, function(index, data)
                 local row = modeRows[index]
                 if not row then
-                    row = CreateEntryRow(mode, index)
+                    row = CreateEntryRow(storageMode, index)
                     modeRows[index] = row
                 end
                 row:SetPoint("TOPLEFT", 0, -y)
                 row:SetWidth(width)
                 row.label:SetWidth(math.max(1, width - 90))
-                local preview = GetEntryPreview(mode, index, data):gsub("\n", " · ")
-                local name = GetEntryName(mode, index, data)
+                local preview = GetEntryPreview(storageMode, index, data):gsub("\n", " · ")
+                local name = GetEntryName(storageMode, index, data)
                 local label = name .. "  ·  " .. preview
                 row.label:SetText(label:gsub("|", "||"))
                 row:SetHeight(math.max(28, row.label:GetStringHeight() + 8))
-                row.check:SetChecked(not IsEntryHidden(mode, index))
+                row.check:SetChecked(not IsEntryHidden(storageMode, index))
                 row:Show()
                 y = y + row:GetHeight()
             end)
