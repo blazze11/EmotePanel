@@ -101,6 +101,30 @@ end
 
 
 
+local function RunOnTargetPlayer(action)
+    if not UnitIsHumanPlayer("target") then return end
+    local name = GetUnitName("target", true)
+    if not issecretvalue(name) and name and name ~= "" then
+        action(name)
+    end
+end
+
+local function OpenWho()
+    if Kiosk.IsEnabled() or C_GameRules.IsGameRuleActive(Enum.GameRule.IngameWhoListDisabled) then return end
+    local query = WhoFrame_GetDefaultWhoCommand()
+    ShowWhoPanel()
+    WhoFrameEditBox:SetText(query)
+    C_FriendList.SendWho(query, Enum.SocialWhoOrigin.Chat)
+end
+
+local function MarkTarget(marker)
+    local current = GetRaidTargetIndex("target")
+    -- A secret marker can only use the native toggle behavior.
+    if issecretvalue(current) or current ~= marker then
+        SetRaidTarget("target", marker)
+    end
+end
+
 local PANEL_MODES = {
     emotes = {
         title = "Emotes",
@@ -171,22 +195,47 @@ local PANEL_MODES = {
         title = "Commands",
         list = {
             -- Saved commands and favorites refer to these slot numbers. Append new entries.
-            { name = "Invite Target",   action = "invite",     actionType = "command", icon = "INV_Misc_GroupNeedMore" },
-            { name = "Inspect Target",  action = "inspect",    actionType = "command", icon = "INV_Professions_Inscription_ScribesMagnifyingGlass_Gold" },
-            { name = "Trade Target",    action = "trade",      actionType = "command", icon = "INV_Misc_Coin_02" },
-            { name = "Follow Target",   action = "follow",     actionType = "command", icon = "Ability_Tracking" },
-            { name = "Befriend Target", action = "friend",     actionType = "command", icon = "INV_ValentinesCard01" },
-            { name = "Roll",            action = "roll",       actionType = "command", icon = "INV_Misc_Dice_02" },
-            { name = "Ready Check",     action = "readycheck", actionType = "command", icon = "Interface\\RaidFrame\\ReadyCheck-Ready" },
-            { name = "Who",             action = "who",        actionType = "command", icon = "INV_Misc_Spyglass_02" },
-            { name = "Leave Channel",   action = "leave",      actionType = "command", icon = "Spell_Shadow_Teleport" },
+            { name = "Invite Target",   action = "invite",     actionType = "command", icon = "INV_Misc_GroupNeedMore",
+                run = function() RunOnTargetPlayer(C_PartyInfo.InviteUnit) end },
+            { name = "Inspect Target",  action = "inspect",    actionType = "command", icon = "INV_Professions_Inscription_ScribesMagnifyingGlass_Gold",
+                run = function() InspectUnit("target") end },
+            { name = "Trade Target",    action = "trade",      actionType = "command", icon = "INV_Misc_Coin_02",
+                run = function() InitiateTrade("target") end },
+            { name = "Follow Target",   action = "follow",     actionType = "command", icon = "Ability_Tracking",
+                run = function() FollowUnit("") end },
+            { name = "Befriend Target", action = "friend",     actionType = "command", icon = "INV_ValentinesCard01",
+                run = function()
+                    if C_GameRules.IsGameRuleActive(Enum.GameRule.IngameFriendsListDisabled) then return end
+                    if not UnitIsHumanPlayer("target") then
+                        ToggleFriendsPanel()
+                    elseif C_FriendList.IsLegacyFriendSystemEnabled() then
+                        RunOnTargetPlayer(C_FriendList.AddOrRemoveFriend)
+                    end
+                end },
+            { name = "Roll",            action = "roll",       actionType = "command", icon = "INV_Misc_Dice_02",
+                run = function() RandomRoll(1, 100) end },
+            { name = "Ready Check",     action = "readycheck", actionType = "command", icon = "Interface\\RaidFrame\\ReadyCheck-Ready",
+                run = function()
+                    if UnitIsGroupLeader("player") or UnitIsGroupAssistant("player") then C_PartyInfo.DoReadyCheck() end
+                end },
+            { name = "Who",             action = "who",        actionType = "command", icon = "INV_Misc_Spyglass_02",
+                run = OpenWho },
+            { name = "Leave Channel",   action = "leave",      actionType = "command", icon = "Spell_Shadow_Teleport",
+                preview = "Open Chat Channels",
+                run = function() ToggleChannelFrame() end },
             { name = "Reload UI",       action = "reload",     actionType = "command", icon = "INV_Misc_Gear_01" },
-            { name = "Pull in 5s",      action = (SLASH_COUNTDOWN1 or "/countdown") .. " 5", actionType = "command", icon = "INV_Misc_PocketWatch_01" },
-            { name = "Pull in 10s",     action = (SLASH_COUNTDOWN1 or "/countdown") .. " 10", actionType = "command", icon = "INV_Misc_PocketWatch_03" },
-            { name = "Mark Skull",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " !8", actionType = "command", icon = "Interface\\TARGETINGFRAME\\UI-RaidTargetingIcon_8" },
-            { name = "Mark Cross",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " !7", actionType = "command", icon = "Interface\\TARGETINGFRAME\\UI-RaidTargetingIcon_7" },
-            { name = "Clear Mark",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " 0", actionType = "command", icon = "Interface\\RaidFrame\\ReadyCheck-NotReady" },
-            { name = "Dismount",        action = SLASH_DISMOUNT1 or "/dismount", actionType = "command", icon = "Ability_Mount_RidingHorse" },
+            { name = "Pull in 5s",      action = (SLASH_COUNTDOWN1 or "/countdown") .. " 5", actionType = "command", icon = "INV_Misc_PocketWatch_01",
+                run = function() C_PartyInfo.DoCountdown(5) end },
+            { name = "Pull in 10s",     action = (SLASH_COUNTDOWN1 or "/countdown") .. " 10", actionType = "command", icon = "INV_Misc_PocketWatch_03",
+                run = function() C_PartyInfo.DoCountdown(10) end },
+            { name = "Mark Skull",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " !8", actionType = "command", icon = "Interface\\TARGETINGFRAME\\UI-RaidTargetingIcon_8",
+                run = function() MarkTarget(8) end },
+            { name = "Mark Cross",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " !7", actionType = "command", icon = "Interface\\TARGETINGFRAME\\UI-RaidTargetingIcon_7",
+                run = function() MarkTarget(7) end },
+            { name = "Clear Mark",      action = (SLASH_TARGET_MARKER1 or "/tm") .. " 0", actionType = "command", icon = "Interface\\RaidFrame\\ReadyCheck-NotReady",
+                run = function() SetRaidTarget("target", 0) end },
+            { name = "Dismount",        action = SLASH_DISMOUNT1 or "/dismount", actionType = "command", icon = "Ability_Mount_RidingHorse",
+                run = function() Dismount() end },
         }
     }
 }
@@ -365,6 +414,7 @@ local function GetEntryPreview(mode, index, data)
         return ("%s · %d / %d\n%s"):format(kind, data.rank, data.maxRank, action)
     end
     local text = GetCustomMessage(mode, index) or data.action
+    if data.preview and text:gsub("^/+", "") == data.action then return data.preview end
     if data.actionType == "command" then return "/" .. text:gsub("^/+", "") end
     return text
 end
@@ -403,6 +453,12 @@ local function ExecuteAction(mode, index, data)
         ProfessionsFrame:SelectBookPage()
         ShowUIPanel(ProfessionsFrame)
     elseif data.actionType == "command" then
+        local customCommand = GetCustomMessage(mode, index)
+        if data.run and (not customCommand or customCommand:gsub("^/+", "") == data.action:gsub("^/+", "")) then
+            data.run()
+            EmotePanel.frame:Hide()
+            return
+        end
         local command = GetEntryPreview(mode, index, data)
         local editBox = GetAvailableChatBox()
         if not editBox then return end
@@ -1472,7 +1528,7 @@ local function CreateCustomizationPanel(mainPanel)
 
     local instructions3 = customizationPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     instructions3:SetPoint("TOPLEFT", instructions2, "BOTTOMLEFT", 0, -8)
-    instructions3:SetText("Selecting a command submits it immediately through WoW chat.")
+    instructions3:SetText("Built-in commands use WoW actions. Custom slash commands use chat.")
 
     -- Add button to reset all custom entries.
     local resetCustomButton = CreateTextButton(customizationPanel, "Reset All Custom Entries")
