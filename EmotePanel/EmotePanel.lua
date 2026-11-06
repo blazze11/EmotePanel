@@ -955,10 +955,11 @@ function EmotePanel:CanUseWheel()
 end
 
 function EmotePanel:CreateWheel()
-    local wheel = CreateFrame("Frame", nil, self.frame)
+    local wheel = CreateFrame("Button", nil, self.frame)
     wheel:SetSize(WHEEL_SIZE, WHEEL_SIZE)
     wheel:SetPoint("TOP", 0, -54)
     wheel:EnableMouse(true)
+    wheel:RegisterForClicks("LeftButtonUp")
     self.wheel = wheel
 
     self.wheelArt = AddAtlas(wheel, WHEEL_ATLAS)
@@ -1050,7 +1051,7 @@ function EmotePanel:CreateWheel()
             mouseDownPage = currentPageIndex
         end
     end)
-    wheel:SetScript("OnMouseUp", function(_, mouseButton)
+    local function FinishClick(mouseButton)
         if mouseButton ~= mouseDownButton then return end
         local pressedSector, pressedPage = mouseDownSector, mouseDownPage
         mouseDownButton, mouseDownSector, mouseDownPage = nil, nil, nil
@@ -1060,6 +1061,13 @@ function EmotePanel:CreateWheel()
             if GameTooltip:IsOwned(wheel) then GameTooltip:Hide() end
             self:ActivateSector(index, mouseButton)
         end
+    end
+    -- Left-click commands need the button's hardware click context.
+    wheel:SetScript("OnClick", function(_, mouseButton)
+        if mouseButton == "LeftButton" then FinishClick(mouseButton) end
+    end)
+    wheel:SetScript("OnMouseUp", function(_, mouseButton)
+        if mouseButton ~= "LeftButton" then FinishClick(mouseButton) end
     end)
 end
 
