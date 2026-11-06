@@ -331,18 +331,19 @@ local categoryPages = {}
 local macrosByID, macroIDs = {}, {}
 local macroCharacter
 local professionPage = { mode = "professions", title = "Professions", count = 0, entries = {} }
-local categoryWheel = {
-    mode = "categories", title = "Categories", count = SECTOR_COUNT, entries = {
-        { category = "favorites", name = "Favorites", icon = "atlas:collections-icon-favorites" },
-        { category = "emotes", name = "Emotes", icon = "Spell_Misc_EmotionHappy", actionType = "emote" },
-        { category = "voicedEmotes", name = voicedEmoteTitle, icon = "Ability_Warrior_BattleShout", actionType = "emote" },
-        { category = "chat", name = "Say Chat", icon = "atlas:gamepad-radial-icon-chat", actionType = "say" },
-        { category = "party", name = "Party Chat", icon = "atlas:gamepad-radial-icon-communities", actionType = "party" },
-        { category = "commands", name = "Commands", icon = "INV_Misc_Gear_01", actionType = "command" },
-        { category = "panels", name = "Game Panels", icon = "atlas:gamepad-radial-icon-character", actionType = "panel" },
-        { category = "professions", name = "Professions", icon = "INV_Misc_Note_06", actionType = "profession" },
-    },
+local categoryEntries = {
+    { category = "favorites", name = "Favorites", icon = "atlas:collections-icon-favorites" },
+    { category = "emotes", name = "Emotes", icon = "Spell_Misc_EmotionHappy", actionType = "emote" },
+    { category = "voicedEmotes", name = voicedEmoteTitle, icon = "Ability_Warrior_BattleShout", actionType = "emote" },
+    { category = "chat", name = "Say Chat", icon = "atlas:gamepad-radial-icon-chat", actionType = "say" },
+    { category = "party", name = "Party Chat", icon = "atlas:gamepad-radial-icon-communities", actionType = "party" },
+    { category = "commands", name = "Commands", icon = "INV_Misc_Gear_01", actionType = "command" },
+    { category = "panels", name = "Game Panels", icon = "atlas:gamepad-radial-icon-character", actionType = "panel" },
+    { category = "professions", name = "Professions", icon = "INV_Misc_Note_06", actionType = "profession" },
 }
+local categoryByID = {}
+for _, entry in ipairs(categoryEntries) do categoryByID[entry.category] = entry end
+local categoryWheel
 local learnedProfessions = {}
 local professionsBySkillLine = {}
 local currentPageIndex, currentPage
@@ -497,6 +498,10 @@ local function ReadMacros()
 end
 
 local function ForEachEntry(category, callback)
+    if category == "categories" then
+        for _, entry in ipairs(categoryEntries) do callback(entry.category, entry) end
+        return
+    end
     if category == "macros" then
         for _, id in ipairs(macroIDs) do
             if macrosByID[id] then callback(id, macrosByID[id]) end
@@ -563,6 +568,21 @@ local function GetVisibleEntryIDs(category)
         if IsEntryVisible(mode, index) then table.insert(entries, index) end
     end
     return entries
+end
+
+local function MoveOrderedEntry(category, index, neighbor)
+    if not neighbor then return false end
+    -- Retain saved positions for entries that are unavailable on this character.
+    local order = GetOrderedEntryIDs(category, true)
+    local from, to
+    for position, id in ipairs(order) do
+        if id == index then from = position end
+        if id == neighbor then to = position end
+    end
+    if not (from and to) then return false end
+    order[from], order[to] = order[to], order[from]
+    EmotePanelSavedVars.entryOrder[category] = order
+    return true
 end
 
 local function BuildCategoryPages()
@@ -678,7 +698,10 @@ end
 local function GetSectorEntry(sector)
     if not sector or sector < 1 or sector > currentPage.count then return end
     local mode = currentPage.mode
-    if currentPage == categoryWheel then return mode, sector, categoryWheel.entries[sector] end
+    if currentPage == categoryWheel then
+        local id = categoryWheel.entries[sector]
+        return mode, id, categoryByID[id]
+    end
     local index = (currentPage.first or 1) + sector - 1
     if mode == "favorites" then
         local entry = visibleFavorites[index]
@@ -929,6 +952,19 @@ local function CreateTextButton(parent, text)
     AddAtlas(button, PANEL_BORDER_ATLAS, "BORDER"):SetAllPoints()
     button:SetHighlightAtlas(FOCUS_ATLAS)
     return button
+end
+
+local function CreateOrderButtons(row, edit, move)
+    row.down = CreateTextButton(row, "Down")
+    row.down:SetSize(48, 24)
+    row.down:SetDisabledFontObject(GameFontDisable)
+    row.down:SetPoint("RIGHT", edit or row, edit and "LEFT" or "RIGHT", edit and -4 or 0, 0)
+    row.down:SetScript("OnClick", function() move(row.nextID) end)
+    row.up = CreateTextButton(row, "Up")
+    row.up:SetSize(40, 24)
+    row.up:SetDisabledFontObject(GameFontDisable)
+    row.up:SetPoint("RIGHT", row.down, "LEFT", -4, 0)
+    row.up:SetScript("OnClick", function() move(row.previousID) end)
 end
 
 local function CreateCloseButton(frame)
@@ -1676,7 +1712,9 @@ function EmotePanel:RefreshWheel(selection)
     else
         self.highlight:Hide()
         local emptyText = currentPage.mode == "favorites" and "No favorites" or "No visible entries"
-        if currentPage.mode == "professions" then
+        if currentPage == categoryWheel then
+            emptyText = "No visible categories"
+        elseif currentPage.mode == "professions" then
             emptyText = #learnedProfessions > 0 and "No visible professions" or "No learned professions"
         end
         self.selectionName:SetText(emptyText)
@@ -1793,7 +1831,7 @@ function EmotePanel:RefreshGamepadHint()
     local mode, slot, data = GetSectorEntry(self.selected)
     local actions
     if currentPage == categoryWheel then
-        actions = GamepadGlyph("PAD1", "A") .. " Open    "
+        actions = data and GamepadGlyph("PAD1", "A") .. " Open    " or ""
     elseif data then
         local favoriteAction = FindFavorite(mode, slot) and "Unfavorite" or "Favorite"
         local primaryAction = (data.actionType == "profession" or data.actionType == "panel") and "Open" or "Use"
@@ -1832,6 +1870,11 @@ end
 
 function EmotePanel:ShowStartPage()
     if EmotePanelSavedVars.categoryWheel then
+        local entries = {}
+        for _, id in ipairs(GetOrderedEntryIDs("categories")) do
+            if not IsEntryHidden("categories", id) then table.insert(entries, id) end
+        end
+        categoryWheel = { mode = "categories", title = "Categories", entries = entries, count = #entries }
         self:DisplayPage(nil, categoryWheel, 1)
     else
         self:ShowPage(1, 1)
@@ -1841,16 +1884,14 @@ end
 function EmotePanel:BackOrClose()
     if EmotePanelSavedVars.categoryWheel and currentPage ~= categoryWheel then
         local category = currentPage.category or currentPage.mode
-        if category == "macros" then
-            self:ShowStartPage()
-            return
-        end
-        for index, entry in ipairs(categoryWheel.entries) do
-            if entry.category == category then
+        for index, id in ipairs(categoryWheel.entries) do
+            if id == category then
                 self:DisplayPage(nil, categoryWheel, index)
                 return
             end
         end
+        self:ShowStartPage()
+        return
     end
     self.frame:Hide()
 end
@@ -2173,32 +2214,12 @@ local function CreateHelpPanel(mainPanel)
             if data then EmotePanel:EditButton(mode, index, data, true) end
         end)
 
-        local function Move(neighbor)
-            if not neighbor then return end
-            -- Retain saved positions for professions learned on another character.
-            local order = GetOrderedEntryIDs(category, true)
-            local from, to
-            for position, id in ipairs(order) do
-                if id == index then from = position end
-                if id == neighbor then to = position end
+        CreateOrderButtons(row, edit, function(neighbor)
+            if MoveOrderedEntry(category, index, neighbor) then
+                EmotePanel:RefreshEntryPages()
+                helpPanel:refresh()
             end
-            if not (from and to) then return end
-            order[from], order[to] = order[to], order[from]
-            EmotePanelSavedVars.entryOrder[category] = order
-            EmotePanel:RefreshEntryPages()
-            helpPanel:refresh()
-        end
-
-        row.down = CreateTextButton(row, "Down")
-        row.down:SetSize(48, 24)
-        row.down:SetDisabledFontObject(GameFontDisable)
-        row.down:SetPoint("RIGHT", edit, "LEFT", -4, 0)
-        row.down:SetScript("OnClick", function() Move(row.nextID) end)
-        row.up = CreateTextButton(row, "Up")
-        row.up:SetSize(40, 24)
-        row.up:SetDisabledFontObject(GameFontDisable)
-        row.up:SetPoint("RIGHT", row.down, "LEFT", -4, 0)
-        row.up:SetScript("OnClick", function() Move(row.previousID) end)
+        end)
         return row
     end
 
@@ -2296,6 +2317,95 @@ end
 
 local categoryIDs = {}
 
+local function CreateCategoriesPanel(mainPanel)
+    local panel = CreateFrame("Frame", AddonName .. "CategoriesPanel", mainPanel)
+    panel.name = "Categories"
+    panel.parent = AddonName
+
+    local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", 16, -16)
+    title:SetText("Category Wheel")
+
+    local toggle = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+    toggle:SetSize(24, 24)
+    toggle:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -12)
+    local toggleLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    toggleLabel:SetPoint("LEFT", toggle, "RIGHT", 4, 0)
+    toggleLabel:SetText("Open on Category Wheel")
+
+    local description = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    description:SetPoint("TOPLEFT", toggle, "BOTTOMLEFT", 0, -10)
+    description:SetText("Uncheck a category to hide it. Use Up and Down to change its position on the wheel.")
+
+    local reset = CreateTextButton(panel, "Reset Order")
+    reset:SetSize(100, 24)
+    reset:SetPoint("TOPRIGHT", -24, -106)
+    reset:SetDisabledFontObject(GameFontDisable)
+    reset:SetScript("OnClick", function()
+        if not EmotePanelSavedVars.categoryWheel then return end
+        EmotePanelSavedVars.entryOrder.categories = nil
+        panel:refresh()
+        EmotePanel:ShowStartPage()
+    end)
+
+    local rows = {}
+    for _, entry in ipairs(categoryEntries) do
+        local id = entry.category
+        local row = CreateFrame("Frame", nil, panel)
+        row:SetHeight(30)
+        local check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
+        check:SetSize(24, 24)
+        check:SetPoint("LEFT")
+        check:SetScript("OnClick", function(self)
+            if not EmotePanelSavedVars.categoryWheel then return end
+            local hidden = EmotePanelSavedVars.hiddenEntries
+            hidden.categories = hidden.categories or {}
+            hidden.categories[id] = not self:GetChecked() or nil
+            EmotePanel:ShowStartPage()
+        end)
+        row.check = check
+
+        local label = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        label:SetPoint("LEFT", check, "RIGHT", 4, 0)
+        label:SetText(entry.name)
+        CreateOrderButtons(row, nil, function(neighbor)
+            if EmotePanelSavedVars.categoryWheel and MoveOrderedEntry("categories", id, neighbor) then
+                panel:refresh()
+                EmotePanel:ShowStartPage()
+            end
+        end)
+        rows[id] = row
+    end
+
+    function panel:refresh()
+        local enabled = EmotePanelSavedVars.categoryWheel == true
+        toggle:SetChecked(enabled)
+        reset:SetEnabled(enabled and EmotePanelSavedVars.entryOrder.categories ~= nil)
+        local order = GetOrderedEntryIDs("categories")
+        for position, id in ipairs(order) do
+            local row = rows[id]
+            local y = -136 - (position - 1) * 30
+            row:SetPoint("TOPLEFT", 16, y)
+            row:SetPoint("TOPRIGHT", -24, y)
+            row:SetAlpha(enabled and 1 or 0.5)
+            row.check:SetChecked(not IsEntryHidden("categories", id))
+            row.check:SetEnabled(enabled)
+            row.previousID, row.nextID = order[position - 1], order[position + 1]
+            row.up:SetEnabled(enabled and row.previousID ~= nil)
+            row.down:SetEnabled(enabled and row.nextID ~= nil)
+        end
+    end
+
+    toggle:SetScript("OnClick", function(self)
+        EmotePanelSavedVars.categoryWheel = not not self:GetChecked()
+        panel:refresh()
+        EmotePanel:ShowStartPage()
+    end)
+    panel:SetScript("OnShow", panel.refresh)
+    panel:refresh()
+    return panel
+end
+
 local function CreateInterfaceOptions()
     -- Create the main panel (General Settings)
     local mainPanel = CreateFrame("Frame", AddonName .. "OptionsPanel", UIParent)
@@ -2322,27 +2432,17 @@ local function CreateInterfaceOptions()
     closeLabel:SetPoint("LEFT", closeCheck, "RIGHT", 4, 0)
     closeLabel:SetText("Close panel after action")
 
-    local categoryCheck = CreateFrame("CheckButton", nil, mainPanel, "UICheckButtonTemplate")
-    categoryCheck:SetSize(24, 24)
-    categoryCheck:SetPoint("TOPLEFT", closeCheck, "BOTTOMLEFT", 0, -8)
-    categoryCheck:SetChecked(EmotePanelSavedVars.categoryWheel == true)
-    categoryCheck:SetScript("OnClick", function(self)
-        EmotePanelSavedVars.categoryWheel = not not self:GetChecked()
-        EmotePanel:ShowStartPage()
-    end)
-    local categoryLabel = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    categoryLabel:SetPoint("LEFT", categoryCheck, "RIGHT", 4, 0)
-    categoryLabel:SetText("Open on Category Wheel")
-
     -- Create panels using our panel creation functions
     local customizationPanel = CreateCustomizationPanel(mainPanel)
     local helpPanel = CreateHelpPanel(mainPanel)
+    local categoriesPanel = CreateCategoriesPanel(mainPanel)
 
     -- Register all panels with the Settings system
     local category = Settings.RegisterCanvasLayoutCategory(mainPanel, mainPanel.name)
     Settings.RegisterAddOnCategory(category)
     EmotePanel.settingsCategoryID = category:GetID()
 
+    categoryIDs.categories = Settings.RegisterCanvasLayoutSubcategory(category, categoriesPanel, categoriesPanel.name):GetID()
     Settings.RegisterCanvasLayoutSubcategory(category, customizationPanel, customizationPanel.name)
     local helpCategory = Settings.RegisterCanvasLayoutSubcategory(category, helpPanel, helpPanel.name)
     categoryIDs.help = helpCategory:GetID()
@@ -2369,7 +2469,7 @@ local function ShowHelp()
     print("  Either stick or D-pad up/down: select. LB/RB or D-pad left/right: change page.")
     print("  A/Cross: open or use. B/Circle: go back or close. Y/Triangle or right-click: edit an action.")
     print("  X/Square or middle-click: add or remove a favorite.")
-    print("  Enable Open on Category Wheel in settings to browse by category. The default opens on Favorites.")
+    print("  /ep categories - Enable, show, hide, or reorder the categories on the opening wheel")
     print("  Game Panels follows Favorites. Panel shortcuts and learned professions can be favorited.")
     print("  Check saved macros in /ep list. Use LB or D-pad left from Favorites or Categories to find them.")
     print("  /ep config - Open settings panel")
@@ -2394,6 +2494,9 @@ local function HandleSlashCommand(msg)
         end
     elseif command == "config" then
         OpenSettings()
+    elseif command == "categories" and categoryIDs.categories then
+        EmotePanel.frame:Hide()
+        Settings.OpenToCategory(categoryIDs.categories)
     elseif command == "scroll" then
         print("EmotePanel: Use LB/RB, D-pad left/right, or the page arrows to browse the wheel.")
     elseif command == "reset" then
