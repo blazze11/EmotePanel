@@ -115,6 +115,11 @@ end
 
 
 
+local function OpenSettings()
+    EmotePanel.frame:Hide()
+    Settings.OpenToCategory(EmotePanel.settingsCategoryID)
+end
+
 local function RunOnTargetPlayer(action)
     if not UnitIsHumanPlayer("target") then return end
     local name = GetUnitName("target", true)
@@ -266,6 +271,9 @@ local PANEL_MODES = {
             { name = "Dismount",        action = SLASH_DISMOUNT1 or "/dismount", actionType = "command", icon = "Ability_Mount_RidingHorse",
                 preview = "Dismount from your current mount",
                 run = function() Dismount() end },
+            { name = "Settings",        action = "ep config", actionType = "command", icon = "atlas:gamepad-radial-icon-gamemenu",
+                preview = "Open EmotePanel settings",
+                run = OpenSettings },
         }
     }
 }
@@ -591,6 +599,10 @@ local function GetAvailableChatBox()
     return editBox
 end
 
+local function CloseAfterAction()
+    if EmotePanelSavedVars.closePanelAfterAction ~= false then EmotePanel.frame:Hide() end
+end
+
 local function ExecuteAction(mode, index, data, fromMouse)
     if data.actionType == "emote" then
         local token = GetEmoteToken(data)
@@ -603,8 +615,9 @@ local function ExecuteAction(mode, index, data, fromMouse)
             end
         end
         C_ChatInfo.PerformEmote(token)
+        CloseAfterAction()
     elseif data.actionType == "panel" then
-        EmotePanel.frame:Hide()
+        CloseAfterAction()
         data.open()
     elseif data.actionType == "profession" then
         local canCraft = data.canCraft
@@ -613,14 +626,14 @@ local function ExecuteAction(mode, index, data, fromMouse)
             if not current or current.professionID ~= index then
                 -- Let TRADE_SKILL_SHOW open the native UI after the hardware click.
                 if C_TradeSkillUI.OpenTradeSkill(index) then
-                    EmotePanel.frame:Hide()
+                    CloseAfterAction()
                     return
                 end
                 canCraft = false
             end
         end
         if not ProfessionsFrame_LoadUI() then return end
-        EmotePanel.frame:Hide()
+        CloseAfterAction()
         if canCraft then
             local current = C_TradeSkillUI.GetBaseProfessionInfo()
             if current and current.professionID == index then
@@ -635,12 +648,12 @@ local function ExecuteAction(mode, index, data, fromMouse)
         local command = GetSlashCommand(mode, index, data)
         if not command then
             data.run()
-            EmotePanel.frame:Hide()
+            CloseAfterAction()
             return
         end
         local editBox = GetAvailableChatBox()
         if not editBox then return end
-        EmotePanel.frame:Hide()
+        CloseAfterAction()
         editBox:SetText(command)
         editBox:SendMessage()
     else
@@ -651,6 +664,7 @@ local function ExecuteAction(mode, index, data, fromMouse)
             return
         end
         C_ChatInfo.SendChatMessage(message, channel)
+        CloseAfterAction()
     end
 end
 
@@ -766,6 +780,7 @@ function EmotePanel:ShowCharacterLauncher()
         table.insert(UISpecialFrames, button:GetName())
         self.characterLauncher = button
     end
+    self.frame:Hide()
     button:Show()
 end
 
@@ -1258,7 +1273,7 @@ function EmotePanel:ActivateSector(index, mouseButton, fromMouse)
             if GetAvailableChatBox() then
                 -- Request reload before changing focus or updating the wheel.
                 ReloadUI()
-                self.frame:Hide()
+                CloseAfterAction()
             end
             return
         end
@@ -1466,10 +1481,7 @@ function EmotePanel:CreateControls()
     local help = CreateTextButton(frame, "?")
     help:SetSize(28, 28)
     help:SetPoint("TOPLEFT", 11, -11)
-    help:SetScript("OnClick", function()
-        frame:Hide()
-        Settings.OpenToCategory(self.settingsCategoryID)
-    end)
+    help:SetScript("OnClick", OpenSettings)
 
     local footer = AddAtlas(frame, "gamepad-radial-menu-bottomtext", "BORDER")
     footer:SetSize(410, 102)
@@ -1898,6 +1910,17 @@ local function CreateInterfaceOptions()
     description:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
     description:SetText("Open with /ep or bind Open or Close Emote Panel in Keybindings.\nAim either stick to select a sector or use the D-pad.")
 
+    local closeCheck = CreateFrame("CheckButton", nil, mainPanel, "UICheckButtonTemplate")
+    closeCheck:SetSize(24, 24)
+    closeCheck:SetPoint("TOPLEFT", description, "BOTTOMLEFT", 0, -16)
+    closeCheck:SetChecked(EmotePanelSavedVars.closePanelAfterAction ~= false)
+    closeCheck:SetScript("OnClick", function(self)
+        EmotePanelSavedVars.closePanelAfterAction = not not self:GetChecked()
+    end)
+    local closeLabel = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    closeLabel:SetPoint("LEFT", closeCheck, "RIGHT", 4, 0)
+    closeLabel:SetText("Close panel after action")
+
     -- Create panels using our panel creation functions
     local customizationPanel = CreateCustomizationPanel(mainPanel)
     local helpPanel = CreateHelpPanel(mainPanel)
@@ -1955,8 +1978,7 @@ local function HandleSlashCommand(msg)
             print("|cFF00FF00EmotePanel:|r Could not open help panel. Try '/ep config' instead.")
         end
     elseif command == "config" then
-        EmotePanel.frame:Hide()
-        Settings.OpenToCategory(EmotePanel.settingsCategoryID)
+        OpenSettings()
     elseif command == "scroll" then
         print("EmotePanel: Use LB/RB, D-pad left/right, or the page arrows to browse the wheel.")
     elseif command == "reset" then
