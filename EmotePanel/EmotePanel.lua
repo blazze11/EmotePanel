@@ -467,11 +467,37 @@ local function IsEntryHidden(mode, index)
     return hidden and hidden[index]
 end
 
-local function GetVisibleEntryIDs(category)
-    local entries = {}
+local function GetOrderedEntryIDs(category, keepUnavailable)
+    local defaultOrder, available = {}, {}
     ForEachEntry(category, function(index)
-        if not IsEntryHidden(GetStorageMode(category), index) then table.insert(entries, index) end
+        table.insert(defaultOrder, index)
+        available[index] = true
     end)
+
+    local savedOrder = EmotePanelSavedVars.entryOrder[category]
+    if type(savedOrder) ~= "table" then return defaultOrder end
+
+    local entries, seen = {}, {}
+    local function Add(index)
+        if seen[index] then return end
+        seen[index] = true
+        table.insert(entries, index)
+    end
+    for _, index in ipairs(savedOrder) do
+        if (type(index) == "number" or type(index) == "string") and (available[index] or keepUnavailable) then
+            Add(index)
+        end
+    end
+    for _, index in ipairs(defaultOrder) do Add(index) end
+    return entries
+end
+
+local function GetVisibleEntryIDs(category)
+    local mode = GetStorageMode(category)
+    local entries = {}
+    for _, index in ipairs(GetOrderedEntryIDs(category)) do
+        if not IsEntryHidden(mode, index) then table.insert(entries, index) end
+    end
     return entries
 end
 
@@ -1802,6 +1828,7 @@ function EmotePanel:Initialize()
     EmotePanelSavedVars.customIcons = EmotePanelSavedVars.customIcons or {}
     EmotePanelSavedVars.entries = EmotePanelSavedVars.entries or {}
     EmotePanelSavedVars.hiddenEntries = EmotePanelSavedVars.hiddenEntries or {}
+    if type(EmotePanelSavedVars.entryOrder) ~= "table" then EmotePanelSavedVars.entryOrder = {} end
     LoadNativeEmotes()
     LoadFavorites()
     RefreshProfessions()
@@ -1838,7 +1865,7 @@ local function CreateHelpPanel(mainPanel)
 
     local description = helpPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     description:SetPoint("TOPLEFT", helpTitle, "BOTTOMLEFT", 0, -8)
-    description:SetText("Uncheck an entry to hide it from the wheel, including Favorites.")
+    description:SetText("Use Up or Down to reorder entries.\nUncheck an entry to hide it from its category and Favorites.")
 
     local previousButton
     for _, mode in ipairs(modeOrder) do
@@ -1864,7 +1891,7 @@ local function CreateHelpPanel(mainPanel)
 
     helpPanel.scrollFrame = scrollFrame
     local content = CreateFrame("Frame", nil, scrollFrame)
-    local headers, rows = {}, {}
+    local headers, rows, resetButtons = {}, {}, {}
     scrollFrame.content = content
     scrollFrame:SetScrollChild(content)
 
@@ -1876,9 +1903,19 @@ local function CreateHelpPanel(mainPanel)
             or mode == "voicedEmotes" and voicedEmoteTitle or PANEL_MODES[mode].title)
         headers[mode] = header
         rows[mode] = {}
+
+        local reset = CreateTextButton(content, "Reset Order")
+        reset:SetSize(100, 24)
+        reset:SetDisabledFontObject(GameFontDisable)
+        reset:SetScript("OnClick", function()
+            EmotePanelSavedVars.entryOrder[mode] = nil
+            EmotePanel:RefreshEntryPages()
+            helpPanel:refresh()
+        end)
+        resetButtons[mode] = reset
     end
 
-    local function CreateEntryRow(mode, index)
+    local function CreateEntryRow(category, mode, index)
         local row = CreateFrame("Frame", nil, content)
         local check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
         check:SetSize(24, 24)
@@ -1901,6 +1938,33 @@ local function CreateHelpPanel(mainPanel)
             local data = GetEntryData(mode, index)
             if data then EmotePanel:EditButton(mode, index, data, true) end
         end)
+
+        local function Move(neighbor)
+            if not neighbor then return end
+            -- Retain saved positions for professions learned on another character.
+            local order = GetOrderedEntryIDs(category, true)
+            local from, to
+            for position, id in ipairs(order) do
+                if id == index then from = position end
+                if id == neighbor then to = position end
+            end
+            if not (from and to) then return end
+            order[from], order[to] = order[to], order[from]
+            EmotePanelSavedVars.entryOrder[category] = order
+            EmotePanel:RefreshEntryPages()
+            helpPanel:refresh()
+        end
+
+        row.down = CreateTextButton(row, "Down")
+        row.down:SetSize(48, 24)
+        row.down:SetDisabledFontObject(GameFontDisable)
+        row.down:SetPoint("RIGHT", edit, "LEFT", -4, 0)
+        row.down:SetScript("OnClick", function() Move(row.nextID) end)
+        row.up = CreateTextButton(row, "Up")
+        row.up:SetSize(40, 24)
+        row.up:SetDisabledFontObject(GameFontDisable)
+        row.up:SetPoint("RIGHT", row.down, "LEFT", -4, 0)
+        row.up:SetScript("OnClick", function() Move(row.previousID) end)
         return row
     end
 
@@ -1911,18 +1975,25 @@ local function CreateHelpPanel(mainPanel)
         for _, mode in ipairs(listModes) do
             local storageMode = GetStorageMode(mode)
             headers[mode]:SetPoint("TOPLEFT", 0, -y)
-            y = y + 24
+            resetButtons[mode]:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, -y)
+            resetButtons[mode]:SetEnabled(EmotePanelSavedVars.entryOrder[mode] ~= nil)
+            y = y + 28
             local modeRows = rows[mode]
             for _, row in pairs(modeRows) do row:Hide() end
-            ForEachEntry(mode, function(index, data)
+            local entries = GetOrderedEntryIDs(mode)
+            for position, index in ipairs(entries) do
+                local data = GetEntryData(storageMode, index)
                 local row = modeRows[index]
                 if not row then
-                    row = CreateEntryRow(storageMode, index)
+                    row = CreateEntryRow(mode, storageMode, index)
                     modeRows[index] = row
                 end
+                row.previousID, row.nextID = entries[position - 1], entries[position + 1]
+                row.up:SetEnabled(row.previousID ~= nil)
+                row.down:SetEnabled(row.nextID ~= nil)
                 row:SetPoint("TOPLEFT", 0, -y)
                 row:SetWidth(width)
-                row.label:SetWidth(math.max(1, width - 90))
+                row.label:SetWidth(math.max(1, width - 186))
                 local preview = GetEntryPreview(storageMode, index, data):gsub("\n", " · ")
                 local name = GetEntryName(storageMode, index, data)
                 local label = name .. "  ·  " .. preview
@@ -1931,7 +2002,7 @@ local function CreateHelpPanel(mainPanel)
                 row.check:SetChecked(not IsEntryHidden(storageMode, index))
                 row:Show()
                 y = y + row:GetHeight()
-            end)
+            end
             y = y + 12
         end
         content:SetHeight(y)
@@ -2068,7 +2139,7 @@ local function ShowHelp()
     print("  Game Panels follows Favorites. Panel shortcuts and learned professions can be favorited.")
     print("  /ep config - Open settings panel")
     print("  /ep reset - Reset icon and text overrides")
-    print("  /ep list - Show, hide, edit, or add wheel entries")
+    print("  /ep list - Show, hide, reorder, edit, or add wheel entries")
 end
 
 local function HandleSlashCommand(msg)
