@@ -1445,7 +1445,9 @@ function EmotePanel:EditButton(mode, index, data, fromSettings)
     end
     local editableText = HasEditableText(data)
     local nativeCommand = data.actionType == "command" and data.run ~= nil
-    dialog:SetHeight(data.custom and 306 or editableText and 278 or 165)
+    local iconTop = editableText and 180 or 60
+    -- Leave room below the icon row for the controller prompts and footer buttons.
+    dialog:SetHeight(iconTop + 130 + (data.custom and 28 or 0))
     dialog.nameBox:SetShown(editableText)
     dialog.nameBox.label:SetShown(editableText)
     dialog.messageBox:SetShown(editableText)
@@ -1453,7 +1455,7 @@ function EmotePanel:EditButton(mode, index, data, fromSettings)
     dialog.messageBox.label:SetText(nativeCommand and "Slash override (optional)" or data.actionType == "emote" and "Emote (e.g. /wave)"
         or data.actionType == "command" and "Slash command" or "Message")
     dialog.resetButton:SetShown(not data.custom)
-    dialog.iconButton:SetPoint("TOP", 20, editableText and -180 or -60)
+    dialog.iconButton:SetPoint("TOP", 20, -iconTop)
     local previousName = GetEntryName(mode, index, data)
     local previousMessage = editableText and (GetCustomMessage(mode, index) or data.action) or ""
     if nativeCommand then previousMessage = GetSlashCommand(mode, index, data) or "" end
