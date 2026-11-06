@@ -29,14 +29,11 @@ local SELECTION_COLORS = {
     profession = { 1, 0.61, 0.32 },
 }
 
--- Default positions for the panels
-local DEFAULT_POSITIONS = {
-    emotePanel = {
-        point = "BOTTOMRIGHT",
-        relativePoint = "BOTTOMRIGHT",
-        x = 0,
-        y = 0
-    },
+local DEFAULT_POSITION = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0 }
+local ANCHOR_OFFSETS = {
+    TOPLEFT = {-0.5, 0.5}, TOP = {0, 0.5}, TOPRIGHT = {0.5, 0.5},
+    LEFT = {-0.5, 0}, CENTER = {0, 0}, RIGHT = {0.5, 0},
+    BOTTOMLEFT = {-0.5, -0.5}, BOTTOM = {0, -0.5}, BOTTOMRIGHT = {0.5, -0.5},
 }
 
 local function GetIconPath(icon)
@@ -877,6 +874,23 @@ StaticPopupDialogs["EMOTEPANEL_RESET_ALL"] = {
     hideOnEscape = true,
     preferredIndex = 3,
 }
+
+StaticPopupDialogs["EMOTEPANEL_RESET_SETTINGS"] = {
+    text = "%s",
+    button1 = "Reset",
+    button2 = "Cancel",
+    OnAccept = function(_, reset) reset() end,
+    OnHide = function() EmotePanel:UpdateMacroInput() end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
+local function IsResetPopupVisible()
+    return StaticPopup_Visible("EMOTEPANEL_RESET_BUTTON") or StaticPopup_Visible("EMOTEPANEL_RESET_ALL")
+        or StaticPopup_Visible("EMOTEPANEL_RESET_SETTINGS")
+end
 local function AddAtlas(parent, atlas, layer)
     local texture = parent:CreateTexture(nil, layer or "BACKGROUND")
     texture:SetAtlas(atlas)
@@ -1473,7 +1487,7 @@ end
 
 function EmotePanel:CanUseWheel()
     return not ((self.customMessageDialog and self.customMessageDialog:IsShown())
-        or StaticPopup_Visible("EMOTEPANEL_RESET_BUTTON") or StaticPopup_Visible("EMOTEPANEL_RESET_ALL"))
+        or IsResetPopupVisible())
 end
 
 function EmotePanel:UpdateMacroInput()
@@ -2005,7 +2019,7 @@ function EmotePanel:SetupGamepad()
         if key == "PADFORWARD" or GetBindingFromClick(key) == "TOGGLEGAMEMENU" then
             return CloseForGameMenu
         end
-        if StaticPopup_Visible("EMOTEPANEL_RESET_BUTTON") or StaticPopup_Visible("EMOTEPANEL_RESET_ALL") then return end
+        if IsResetPopupVisible() then return end
         local dialog = self.customMessageDialog
         if dialog and dialog:IsShown() then
             if dialog.picker and dialog.picker:IsShown() then return pickerActions[key] end
@@ -2072,13 +2086,14 @@ function EmotePanel:SavePosition()
         x = x,
         y = y
     }
+    if self.optionsPanel then self.optionsPanel:refreshPosition() end
 end
 
 function EmotePanel:LoadPosition()
     if not EmotePanelSavedVars then EmotePanelSavedVars = {} end
     if not EmotePanelSavedVars.positions then EmotePanelSavedVars.positions = {} end
 
-    local position = EmotePanelSavedVars.positions.emotePanel or DEFAULT_POSITIONS.emotePanel
+    local position = EmotePanelSavedVars.positions.emotePanel or DEFAULT_POSITION
 
     self.frame:ClearAllPoints()
     self.frame:SetPoint(
@@ -2088,6 +2103,31 @@ function EmotePanel:LoadPosition()
         position.x,
         position.y
     )
+    self:UpdateMacroInput()
+end
+
+function EmotePanel:GetPositionOffsets()
+    local position = EmotePanelSavedVars.positions.emotePanel or DEFAULT_POSITION
+    local point = ANCHOR_OFFSETS[position.point]
+    local relativePoint = ANCHOR_OFFSETS[position.relativePoint]
+    local x, y = position.x, position.y
+    -- Translate older dragged positions without changing their saved anchor.
+    if point and relativePoint and (position.point ~= "CENTER" or position.relativePoint ~= "CENTER") then
+        x = x + relativePoint[1] * UIParent:GetWidth() - point[1] * self.frame:GetWidth()
+        y = y + relativePoint[2] * UIParent:GetHeight() - point[2] * self.frame:GetHeight()
+    end
+    return x, y
+end
+
+function EmotePanel:SetPositionOffsets(x, y)
+    local maxX = math.max(0, (UIParent:GetWidth() - self.frame:GetWidth()) / 2)
+    local maxY = math.max(0, (UIParent:GetHeight() - self.frame:GetHeight()) / 2)
+    EmotePanelSavedVars.positions.emotePanel = {
+        point = "CENTER", relativePoint = "CENTER",
+        x = math.max(-maxX, math.min(x, maxX)),
+        y = math.max(-maxY, math.min(y, maxY)),
+    }
+    self:LoadPosition()
 end
 
 function EmotePanel:Initialize()
@@ -2116,6 +2156,7 @@ function EmotePanel:Initialize()
         if self.customMessageDialog then self.customMessageDialog:Hide() end
         StaticPopup_Hide("EMOTEPANEL_RESET_BUTTON")
         StaticPopup_Hide("EMOTEPANEL_RESET_ALL")
+        StaticPopup_Hide("EMOTEPANEL_RESET_SETTINGS")
     end)
 
     -- Hide by default
@@ -2406,6 +2447,79 @@ local function CreateCategoriesPanel(mainPanel)
     return panel
 end
 
+local function CreatePositionControls(panel, anchor)
+    local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    title:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -18)
+    title:SetText("Wheel position")
+
+    local description = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    description:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -5)
+    description:SetText("Offsets from screen center. Positive X moves right, positive Y moves up.\nYou can also drag the wheel by its header.")
+
+    local controls = CreateFrame("Frame", nil, panel)
+    controls:SetSize(420, 26)
+    controls:SetPoint("TOPLEFT", description, "BOTTOMLEFT", 0, -8)
+    local function CreateOffsetBox(axis, x)
+        local label = controls:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        label:SetPoint("LEFT", x, 0)
+        label:SetText(axis)
+        local box = CreateFrame("EditBox", AddonName .. "Position" .. axis, controls, "InputBoxScriptTemplate")
+        box:SetSize(68, 24)
+        box:SetPoint("LEFT", label, "RIGHT", 8, 0)
+        box:SetFontObject(GameFontHighlight)
+        box:SetAutoFocus(false)
+        box:SetMaxLetters(12)
+        return box
+    end
+    local xBox, yBox = CreateOffsetBox("X", 0), CreateOffsetBox("Y", 104)
+    local status = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    status:SetPoint("TOPLEFT", controls, "BOTTOMLEFT", 0, -6)
+    status:SetText(" ")
+
+    function panel:refreshPosition()
+        local x, y = EmotePanel:GetPositionOffsets()
+        xBox:SetText(("%.1f"):format(x))
+        yBox:SetText(("%.1f"):format(y))
+        status:SetText(" ")
+    end
+
+    local function Apply()
+        local x, y = tonumber(xBox:GetText()), tonumber(yBox:GetText())
+        if not (x and y and math.abs(x) < math.huge and math.abs(y) < math.huge) then
+            status:SetText("Enter a number for both X and Y.")
+            return
+        end
+        EmotePanel:SetPositionOffsets(x, y)
+        xBox:ClearFocus()
+        yBox:ClearFocus()
+        panel:refreshPosition()
+    end
+
+    for _, box in ipairs({xBox, yBox}) do
+        box:SetScript("OnEnterPressed", Apply)
+        box:SetScript("OnEscapePressed", function(self)
+            self:ClearFocus()
+            panel:refreshPosition()
+        end)
+    end
+    local apply = CreateTextButton(controls, "Apply")
+    apply:SetSize(64, 24)
+    apply:SetPoint("LEFT", 208, 0)
+    apply:SetScript("OnClick", Apply)
+
+    local reset = CreateTextButton(controls, "Reset Position")
+    reset:SetSize(116, 24)
+    reset:SetPoint("LEFT", apply, "RIGHT", 8, 0)
+    reset:SetScript("OnClick", function()
+        StaticPopup_Show("EMOTEPANEL_RESET_SETTINGS", "Return the wheel to the center of the screen?", nil, function()
+            EmotePanelSavedVars.positions.emotePanel = nil
+            EmotePanel:LoadPosition()
+            panel:refreshPosition()
+        end)
+    end)
+    return status
+end
+
 local function CreateInterfaceOptions()
     -- Create the main panel (General Settings)
     local mainPanel = CreateFrame("Frame", AddonName .. "OptionsPanel", UIParent)
@@ -2419,12 +2533,15 @@ local function CreateInterfaceOptions()
     -- Description
     local description = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     description:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-    description:SetText("Open with /ep or bind Open or Close Emote Panel in Keybindings.\nAim either stick to select a sector or use the D-pad.")
+    description:SetText("Open with /ep or bind Open or Close Emote Panel in Keybindings.\nAim either stick or use the D-pad. A/Cross uses the selection, LB/RB pages,\nand B/Circle goes back or closes the wheel.")
+
+    local guide = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    guide:SetPoint("TOPLEFT", description, "BOTTOMLEFT", 0, -12)
+    guide:SetText("Categories lets you start on a wheel of category shortcuts and arrange its segments.\nWith Category Wheel off, the wheel opens on Favorites.\nEntries lets you show, hide, reorder, or edit actions and add saved WoW macros.\nCustomization explains icon and text editing and lets you reset overrides.")
 
     local closeCheck = CreateFrame("CheckButton", nil, mainPanel, "UICheckButtonTemplate")
     closeCheck:SetSize(24, 24)
-    closeCheck:SetPoint("TOPLEFT", description, "BOTTOMLEFT", 0, -16)
-    closeCheck:SetChecked(EmotePanelSavedVars.closePanelAfterAction ~= false)
+    closeCheck:SetPoint("TOPLEFT", guide, "BOTTOMLEFT", 0, -12)
     closeCheck:SetScript("OnClick", function(self)
         EmotePanelSavedVars.closePanelAfterAction = not not self:GetChecked()
     end)
@@ -2432,10 +2549,54 @@ local function CreateInterfaceOptions()
     closeLabel:SetPoint("LEFT", closeCheck, "RIGHT", 4, 0)
     closeLabel:SetText("Close panel after action")
 
-    -- Create panels using our panel creation functions
+    local closeHelp = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    closeHelp:SetPoint("TOPLEFT", closeCheck, "BOTTOMLEFT", 0, -4)
+    closeHelp:SetText("Enabled by default. Uncheck it to keep the wheel open after most actions.")
+
+    local positionStatus = CreatePositionControls(mainPanel, closeHelp)
     local customizationPanel = CreateCustomizationPanel(mainPanel)
     local helpPanel = CreateHelpPanel(mainPanel)
     local categoriesPanel = CreateCategoriesPanel(mainPanel)
+
+    local resetTitle = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    resetTitle:SetPoint("TOPLEFT", positionStatus, "BOTTOMLEFT", 0, -12)
+    resetTitle:SetText("Reset settings")
+
+    local resetGeneral = CreateTextButton(mainPanel, "Reset General")
+    resetGeneral:SetSize(120, 24)
+    resetGeneral:SetPoint("TOPLEFT", resetTitle, "BOTTOMLEFT", 0, -7)
+    resetGeneral:SetScript("OnClick", function()
+        StaticPopup_Show("EMOTEPANEL_RESET_SETTINGS", "Restore Close panel after action to its default (enabled)?", nil, function()
+            EmotePanelSavedVars.closePanelAfterAction = nil
+            closeCheck:SetChecked(true)
+        end)
+    end)
+
+    local resetCategories = CreateTextButton(mainPanel, "Reset Categories")
+    resetCategories:SetSize(128, 24)
+    resetCategories:SetPoint("LEFT", resetGeneral, "RIGHT", 8, 0)
+    resetCategories:SetScript("OnClick", function()
+        StaticPopup_Show("EMOTEPANEL_RESET_SETTINGS",
+            "Turn off Category Wheel and restore its default category order and visibility?", nil, function()
+                EmotePanelSavedVars.categoryWheel = nil
+                EmotePanelSavedVars.hiddenEntries.categories = nil
+                EmotePanelSavedVars.entryOrder.categories = nil
+                categoriesPanel:refresh()
+                EmotePanel:ShowStartPage()
+            end)
+    end)
+
+    local resetOverrides = CreateTextButton(mainPanel, "Reset Overrides")
+    resetOverrides:SetSize(128, 24)
+    resetOverrides:SetPoint("LEFT", resetCategories, "RIGHT", 8, 0)
+    resetOverrides:SetScript("OnClick", function() StaticPopup_Show("EMOTEPANEL_RESET_ALL") end)
+
+    local function Refresh()
+        closeCheck:SetChecked(EmotePanelSavedVars.closePanelAfterAction ~= false)
+        mainPanel:refreshPosition()
+    end
+    mainPanel:SetScript("OnShow", Refresh)
+    Refresh()
 
     -- Register all panels with the Settings system
     local category = Settings.RegisterCanvasLayoutCategory(mainPanel, mainPanel.name)
