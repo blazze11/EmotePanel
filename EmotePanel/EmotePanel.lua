@@ -1837,6 +1837,10 @@ function EmotePanel:RefreshGamepadHint()
         .. GamepadGlyph("DIRPADVERTICAL", "Up/Down") .. " Select"
     if currentPage == categoryWheel and self.pageArrows[1]:IsShown() then
         navigation = navigation .. "       Left / " .. GamepadGlyph("PADLSHOULDER", "LB") .. " Macros"
+    elseif EmotePanelSavedVars.categoryWheel and currentPage.mode == "macros" then
+        local _, last = GetCategoryPageRange("macros")
+        local destination = currentPageIndex == last and "Categories" or "Next page"
+        navigation = navigation .. "       Right / " .. GamepadGlyph("PADRSHOULDER", "RB") .. " " .. destination
     elseif self.pageArrows[1]:IsShown() then
         navigation = navigation .. "       " .. GamepadGlyph("DIRPADHORIZONTAL", "Left/Right") .. " / "
             .. GamepadGlyph("PADLSHOULDER", "LB") .. " " .. GamepadGlyph("PADRSHOULDER", "RB") .. " Page"
@@ -1866,13 +1870,15 @@ function EmotePanel:DisplayPage(index, page, selection)
     local nested = EmotePanelSavedVars.categoryWheel
     local inCategory = nested and page ~= categoryWheel
     local canPage = not nested
+    local macroShortcut = nested and page.mode == "macros"
     if inCategory then
         local first, last = GetCategoryPageRange(page.category or page.mode)
         canPage = first ~= last
+        if macroShortcut then canPage = index > first end
     end
     self.backButton:SetShown(inCategory == true)
     self.pageArrows[1]:SetShown(canPage or (page == categoryWheel and GetCategoryPageRange("macros") ~= nil))
-    self.pageArrows[2]:SetShown(canPage)
+    self.pageArrows[2]:SetShown(canPage or macroShortcut == true)
     self.titleText:SetText(currentPage.title)
     if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
     self:RefreshWheel(selection)
@@ -1940,14 +1946,23 @@ end
 
 function EmotePanel:CycleMode(direction)
     if currentPage == categoryWheel and direction < 0 then
-        local first = GetCategoryPageRange("macros")
-        if first then self:ShowPage(first, 1) end
+        local _, last = GetCategoryPageRange("macros")
+        if last then self:ShowPage(last, 1) end
         return
     end
     if not currentPageIndex then return end
     local first, last = 1, FavoritePageCount() + #categoryPages
     if EmotePanelSavedVars.categoryWheel then
         first, last = GetCategoryPageRange(currentPage.category or currentPage.mode)
+        if currentPage.mode == "macros" then
+            local nextPage = currentPageIndex + direction
+            if nextPage > last then
+                self:ShowStartPage()
+            elseif nextPage >= first then
+                self:ShowPage(nextPage, 1)
+            end
+            return
+        end
         if first == last then return end
     end
     self:ShowPage((currentPageIndex - first + direction) % (last - first + 1) + first, 1)
