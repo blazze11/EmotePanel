@@ -401,6 +401,13 @@ local function ExecuteAction(mode, index, data)
             return
         end
         EmotePanel.frame:Hide()
+        local verb = command:match("^%S+"):upper()
+        local reload = SlashCmdList.RELOAD
+        -- Let the player submit reload from Blizzard's chat box.
+        if verb == "/RELOAD" or verb == "/RL" or (reload and hash_SlashCmdList and hash_SlashCmdList[verb] == reload) then
+            ChatFrameUtil.OpenChat(command, editBox.chatFrame)
+            return
+        end
         editBox:SetText(command)
         editBox:SendMessage()
     else
@@ -1446,7 +1453,7 @@ local function CreateCustomizationPanel(mainPanel)
 
     local instructions3 = customizationPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     instructions3:SetPoint("TOPLEFT", instructions2, "BOTTOMLEFT", 0, -8)
-    instructions3:SetText("Selecting a command submits it immediately through WoW chat.")
+    instructions3:SetText("Most commands submit immediately. Reload UI requires Enter in chat.")
 
     -- Add button to reset all custom entries.
     local resetCustomButton = CreateTextButton(customizationPanel, "Reset All Custom Entries")
