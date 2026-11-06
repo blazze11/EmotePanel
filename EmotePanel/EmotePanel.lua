@@ -356,43 +356,6 @@ local function GetSectorEntry(sector)
     return mode, index, GetEntryData(mode, index)
 end
 
-local targetCommands = {
-    ["/inspect"] = "target",
-    ["/trade"] = "target",
-    ["/invite"] = "name",
-    ["/follow"] = "name",
-    ["/friend"] = "name",
-    ["/addfriend"] = "name",
-    ["/tm"] = "marker",
-    ["/targetmarker"] = "marker",
-}
-for key, kind in pairs({
-    INSPECT = "target", TRADE = "target", INVITE = "name",
-    REQUEST_INVITE = "name", FOLLOW = "name", FRIENDS = "name", TARGET_MARKER = "marker",
-}) do
-    local index = 1
-    while _G["SLASH_" .. key .. index] do
-        targetCommands[_G["SLASH_" .. key .. index]:lower()] = kind
-        index = index + 1
-    end
-end
-
-local function HasLockedTarget()
-    return UnitExists("target") and not IsTargetLoose()
-end
-
-local function NeedsLockedTarget(verb, arguments)
-    local kind = targetCommands[verb]
-    if kind == "target" then return true end
-    if kind == "name" then return arguments == "" end
-    if kind == "marker" then
-        if not arguments:find("[", 1, true) then return true end
-        local _, unit = SecureCmdOptionParse(arguments)
-        return issecretvalue(unit) or not unit or unit == "target"
-    end
-    return false
-end
-
 local function GetEntryPreview(mode, index, data)
     if data.actionType == "emote" then return "/" .. data.action end
     if data.actionType == "panel" then return "Open " .. data.name end
@@ -410,8 +373,7 @@ local function ExecuteAction(mode, index, data)
     if data.actionType == "emote" then
         local alias = "/" .. data.action:upper()
         local token = hash_EmoteTokenList and hash_EmoteTokenList[alias] or data.action:upper()
-        local targetName = not HasLockedTarget() and "none" or nil
-        C_ChatInfo.PerformEmote(token, targetName)
+        C_ChatInfo.PerformEmote(token)
     elseif data.actionType == "panel" then
         EmotePanel.frame:Hide()
         data.open()
@@ -430,19 +392,6 @@ local function ExecuteAction(mode, index, data)
         ShowUIPanel(ProfessionsFrame)
     elseif data.actionType == "command" then
         local command = GetEntryPreview(mode, index, data)
-        if not HasLockedTarget() then
-            local verb, arguments = command:match("^(%S+)%s*(.-)%s*$")
-            if verb and NeedsLockedTarget(verb:lower(), arguments) then
-                print("EmotePanel: Select a target first.")
-                return
-            end
-            local emote = arguments == "" and hash_EmoteTokenList and hash_EmoteTokenList[verb:upper()]
-            if emote then
-                EmotePanel.frame:Hide()
-                C_ChatInfo.PerformEmote(emote, "none")
-                return
-            end
-        end
         local activeBox = ChatFrameUtil.GetActiveWindow()
         local editBox = ChatFrameUtil.ChooseBoxForSend()
         if not editBox then return end
