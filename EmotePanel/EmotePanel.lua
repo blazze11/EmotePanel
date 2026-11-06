@@ -2534,14 +2534,23 @@ local function CreateInterfaceOptions()
     title:SetPoint("TOPLEFT", 16, -16)
     title:SetText("EmotePanel Options")
 
-    -- Description
-    local description = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    description:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -8)
-    description:SetJustifyH("LEFT")
-    description:SetText("Open with /ep or set a shortcut in Keybindings → Emote Panel.\nAim either stick or use the D-pad. A/Cross activates, LB/RB changes pages,\nand B/Circle goes back or closes the wheel.")
+    local instructions = CreateFrame("Frame", nil, mainPanel)
+    instructions:SetSize(480, 46)
+    instructions:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -10)
+    local function AddInstruction(label, detail, y)
+        local heading = instructions:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+        heading:SetPoint("TOPLEFT", 0, y)
+        heading:SetText(label)
+        local body = instructions:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        body:SetPoint("TOPLEFT", 108, y)
+        body:SetJustifyH("LEFT")
+        body:SetText(detail)
+    end
+    AddInstruction("Open the wheel", "Type /ep or assign a shortcut under Emote Panel in Keybindings.", 0)
+    AddInstruction("Controller", "Aim with either stick or the D-pad. Press A/Cross to use an action.\nUse LB/RB to change pages and B/Circle to go back or close.", -18)
 
     local behavior = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    behavior:SetPoint("TOPLEFT", description, "BOTTOMLEFT", 0, -16)
+    behavior:SetPoint("TOPLEFT", instructions, "BOTTOMLEFT", 0, -10)
     behavior:SetText("Wheel behavior")
 
     local closeCheck = CreateFrame("CheckButton", nil, mainPanel, "UICheckButtonTemplate")
@@ -2568,8 +2577,8 @@ local function CreateInterfaceOptions()
     pagesTitle:SetText("More settings")
     local pageLinks = {
         {"categories", "Categories", "Enable Category Wheel and arrange its segments.\nWith it off, the wheel opens on Favorites."},
-        {"help", "Entries", "Show, hide, reorder, and edit actions.\nChoose saved WoW macros to add to the wheel."},
         {"customization", "Customization", "Learn how to edit icons and text or reset overrides."},
+        {"help", "Entries", "Show, hide, reorder, and edit actions.\nChoose saved WoW macros to add to the wheel."},
     }
     local previous = pagesTitle
     for _, page in ipairs(pageLinks) do
