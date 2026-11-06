@@ -1,17 +1,19 @@
 # EmotePanel for WoW: Forever
 
 EmotePanel is an eight-slice wheel for controller and mouse. Use it for
-regular and voiced emotes, quick chat, game actions, learned professions,
-and shortcuts to Blizzard panels. The wheel opens on **Favorites** by default. You can also start on a
-customizable category wheel.
+regular and voiced emotes, quick Say and Party messages, game actions,
+learned professions, saved WoW macros, and shortcuts to Blizzard panels.
+It opens on **Favorites** by default. Enable **Category Wheel** to start
+on a set of category shortcuts you can show, hide, and reorder.
 
 ## Install
 
-Copy the inner `EmotePanel` folder from this repository into
-`World of Warcraft/_forever_/Interface/AddOns/`. The installed folder
-should contain `EmotePanel.toc`, `EmotePanel.lua`, and `Bindings.xml`.
-Enable **EmotePanel** in the AddOns menu. If the game is already open
-and the addon was previously installed, run `/reload`.
+Download `EmotePanel-0.21.2.zip` from the
+[EmotePanel 0.21.2 release](https://github.com/blazze11/EmotePanel/releases/tag/v0.21.2).
+Extract the `EmotePanel` folder into
+`World of Warcraft/_forever_/Interface/AddOns/`. Enable **EmotePanel** in
+the AddOns menu. If you're updating an existing installation while the game
+is open, run `/reload`.
 
 This branch targets **WoW: Forever 1.60.1** (interface `16001`).
 
@@ -54,10 +56,16 @@ action description appears below it.
 - Uncheck **Close panel after action** to keep the wheel open while
   using entries. Settings and the Character Info confirmation close the
   wheel to take focus.
-- The main settings page includes wheel position, controller glyph style,
-  and separate resets for position, general settings, categories, and
-  icon or text overrides.
-  
+- The wheel starts centered. Drag its header to save a new position, or
+  enter horizontal and vertical offsets in **Wheel position**. Positive X
+  moves it right and positive Y moves it up. **Reset Position** recenters it.
+- Choose **Automatic**, **Xbox**, **PlayStation**, or **Nintendo Switch**
+  under **Controller glyphs**. Controller hints in settings, Customize
+  Entry, and the icon picker use larger glyphs and labels.
+- **Reset General**, **Reset Categories**, and **Reset Overrides** ask for
+  confirmation and reset their own settings. **Customization** explains
+  how to edit icons and text.
+
 <img width="596" height="569" alt="custom_icons" src="https://github.com/user-attachments/assets/0f9f0349-ae86-4a17-a7a9-08bb23878c41" />
 
 ## Game actions
