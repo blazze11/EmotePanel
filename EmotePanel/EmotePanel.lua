@@ -445,7 +445,7 @@ local function GetAvailableChatBox()
     return editBox
 end
 
-local function ExecuteAction(mode, index, data)
+local function ExecuteAction(mode, index, data, fromMouse)
     if data.actionType == "emote" then
         local alias = "/" .. data.action:upper()
         local token = hash_EmoteTokenList and hash_EmoteTokenList[alias] or data.action:upper()
@@ -454,15 +454,27 @@ local function ExecuteAction(mode, index, data)
         EmotePanel.frame:Hide()
         data.open()
     elseif data.actionType == "profession" then
+        local canCraft = data.canCraft
+        if fromMouse and canCraft then
+            local current = C_TradeSkillUI.GetBaseProfessionInfo()
+            if not current or current.professionID ~= index then
+                -- Let TRADE_SKILL_SHOW open the native UI after the hardware click.
+                if C_TradeSkillUI.OpenTradeSkill(index) then
+                    EmotePanel.frame:Hide()
+                    return
+                end
+                canCraft = false
+            end
+        end
         if not ProfessionsFrame_LoadUI() then return end
         EmotePanel.frame:Hide()
-        if data.canCraft then
+        if canCraft then
             local current = C_TradeSkillUI.GetBaseProfessionInfo()
             if current and current.professionID == index then
                 OpenProfessionUIToSkillLine(index)
                 return
             end
-            if C_TradeSkillUI.OpenTradeSkill(index) then return end
+            if not fromMouse and C_TradeSkillUI.OpenTradeSkill(index) then return end
         end
         ProfessionsFrame:SelectBookPage()
         ShowUIPanel(ProfessionsFrame)
@@ -1059,6 +1071,10 @@ end
 function EmotePanel:ActivateSector(index, mouseButton, fromMouse)
     local mode, slot, data = GetSectorEntry(index)
     if not data then return end
+    if fromMouse and mouseButton == "LeftButton" and data.actionType == "profession" and data.canCraft then
+        ExecuteAction(mode, slot, data, true)
+        return
+    end
     if fromMouse and mouseButton == "LeftButton" and data.actionType == "command" then
         local verb = GetEntryPreview(mode, slot, data):match("^%S+"):upper()
         local reload = SlashCmdList.RELOAD

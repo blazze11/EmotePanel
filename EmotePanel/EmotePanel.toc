@@ -2,7 +2,7 @@
 ## Title: EmotePanel
 ## Notes: Controller wheel for emotes, quick chat, professions, and game panels
 ## Author: Blazze
-## Version: 0.10.9
+## Version: 0.10.10
 ## SavedVariables: EmotePanelSavedVars
 
 EmotePanel.lua
