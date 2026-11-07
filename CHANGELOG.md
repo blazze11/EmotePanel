@@ -1,5 +1,9 @@
 # EmotePanel changelog
 
+## 0.22.20 for WoW: Forever (unreleased)
+
+- Enable **Remember last Action** in General settings to reopen the wheel at the last-used entry. The checkbox is saved, and the remembered entry clears on logout or UI reload.
+
 ## 0.22.19 for WoW: Forever
 
 Changes since 0.21.4. Requires WoW: Forever 1.60.1 (interface `16001`).
