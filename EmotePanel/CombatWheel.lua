@@ -33,13 +33,13 @@ local CLOSE = [[
 ]]
 
 local SHOW_PAGE = [[
-    local page = ...
+    local page, sector = ...
     self:SetAttribute("page", page)
-    self:SetAttribute("sector", nil)
+    self:SetAttribute("sector", sector)
     self:SetAttribute("press-page", nil)
     self:SetAttribute("press-target", nil)
     self:SetAttribute("press-button", nil)
-    self:CallMethod("DrawPage", page)
+    self:CallMethod("DrawPage", page, sector)
 ]]
 
 -- Coordinates are relative to the same panel bounds used by the display.
@@ -73,7 +73,8 @@ local PRE_CLICK = [[
         else
             self:Show()
             self:RunAttribute("bind-input")
-            self:RunAttribute("show-page", self:GetAttribute("start"))
+            local page = self:GetAttribute("resume-page") or self:GetAttribute("start")
+            self:RunAttribute("show-page", page, self:GetAttribute("resume-sector"))
         end
         return
     end
@@ -138,13 +139,20 @@ local PRE_CLICK = [[
         end
         if kind == "page" then
             self:RunAttribute("show-page", value)
-        elseif kind == "ordinary" then
-            -- CallMethod cannot return the outcome to the secure close handler.
-            self:CallMethod("UseOrdinary", sector, button == "LeftButton")
-        elseif kind == "spell" or kind == "item" or kind == "macro" then
-            self:SetAttribute(kind == "macro" and "macrotext" or kind, value)
-            self:SetAttribute("type", kind)
-            self:SetAttribute("commit", true)
+        else
+            if self:GetAttribute("remember-last-action") then
+                self:SetAttribute("resume-page", page)
+                self:SetAttribute("resume-sector", sector)
+                self:CallMethod("RememberAction", sector)
+            end
+            if kind == "ordinary" then
+                -- CallMethod cannot return the outcome to the secure close handler.
+                self:CallMethod("UseOrdinary", sector, button == "LeftButton")
+            elseif kind == "spell" or kind == "item" or kind == "macro" then
+                self:SetAttribute(kind == "macro" and "macrotext" or kind, value)
+                self:SetAttribute("type", kind)
+                self:SetAttribute("commit", true)
+            end
         end
     end
 ]]
@@ -267,12 +275,13 @@ local function CreateCombatInput(self)
         if newstate ~= "combat" then self:RunAttribute("close-wheel") end
     ]])
     function button:ToggleDisplay() EmotePanel_Toggle() end
-    function button:DrawPage(page)
+    function button:DrawPage(page, sector)
         EmotePanel:CombatDebug("Wheel", EmotePanel.combatPages[page].title)
-        EmotePanel:ShowCombatPage(page)
+        EmotePanel:ShowCombatPage(page, sector)
     end
     function button:CloseDisplay() EmotePanel:CloseCombatDisplay() end
     function button:DrawSelection(sector) EmotePanel:Select(sector) end
+    function button:RememberAction(sector) EmotePanel:RememberAction(sector) end
     function button:UseOrdinary(sector, fromMouse) EmotePanel:ActivateCombatSector(sector, fromMouse) end
     function button:ShowUnavailable(kind, sector)
         if EmotePanel.combatDebug then
@@ -318,6 +327,23 @@ function EmotePanel:HasWheelBinding()
     return GetBindingKey(WHEEL_BINDING) ~= nil
 end
 
+function EmotePanel:SyncCombatResume()
+    local button = self.combatInput
+    if not button or InCombatLockdown() or self.combatView then return end
+    local pageIndex, selection
+    if EmotePanelSavedVars.rememberLastAction and self.lastAction then
+        for index, page in pairs(self.combatPages) do
+            local sector = self:FindRememberedSector(page)
+            if sector and page.actions[sector].value ~= nil then
+                pageIndex, selection = index, sector
+                break
+            end
+        end
+    end
+    button:SetAttribute("resume-page", pageIndex)
+    button:SetAttribute("resume-sector", selection)
+end
+
 function EmotePanel:SyncCombatWheel(refreshControls)
     if InCombatLockdown() or self.combatView or not self.wheel or self.migratingWheelBinding then return end
     if not refreshControls and not self.combatLayoutDirty then return end
@@ -344,6 +370,7 @@ function EmotePanel:SyncCombatWheel(refreshControls)
             end
         end
     end
+    self:SyncCombatResume()
     if new then RegisterStateDriver(button, "combat", "[combat] combat; peace") end
     local bindingSet = GetCurrentBindingSet()
     if #legacyKeys > 0 and (bindingSet == 1 or bindingSet == 2) then
@@ -363,6 +390,7 @@ end
 function EmotePanel:ConfigureCombatInput(button)
     button:SetAttribute("accept", GetBindingFromClick("PAD1") == "TOGGLEGAMEMENU" and "Close" or "Accept")
     button:SetAttribute("close-after-action", EmotePanelSavedVars.closePanelAfterAction ~= false)
+    button:SetAttribute("remember-last-action", EmotePanelSavedVars.rememberLastAction == true)
 
     local width, height = self.frame:GetSize()
     local position = EmotePanelSavedVars.positions and EmotePanelSavedVars.positions.emotePanel

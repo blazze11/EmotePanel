@@ -150,13 +150,17 @@ keeps added entries, visibility choices, order, and favorites.
 
 **Close panel after action** is checked by default on the main EmotePanel
 settings page. Uncheck it to keep the wheel open after using an entry.
+Enable **Remember last Action** to reopen on the page and segment you last
+used. Browsing the wheel leaves that action unchanged. The checkbox is
+saved, and the remembered action clears on logout or `/reload`. If the
+entry is no longer visible, the wheel uses its usual opening page.
 **Controller glyphs** applies to the wheel, editor, icon picker, settings,
 and help. **Automatic** follows WoW’s active icon set. You can choose Xbox,
 PlayStation, or Nintendo Switch when the client has the corresponding art.
 This changes the prompts. The physical controls keep their assignments.
 The main page links to Categories, Customization, and Entries. **Wheel
 Keybind** opens WoW's Emote Panel keybindings. **Reset General** restores
-close-after-action and cooldown display defaults.
+the close-after-action, last-action, and cooldown display defaults.
 
 Under **Customization**, **Wheel Display** has separate toggles for the
 Help (?) button, Close (X) button, and keybind legend. **Wheel position**

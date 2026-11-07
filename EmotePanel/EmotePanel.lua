@@ -834,6 +834,23 @@ local function GetSectorEntry(sector, page)
     return mode, index, GetEntryData(mode, index)
 end
 
+function EmotePanel:RememberAction(sector)
+    if not EmotePanelSavedVars.rememberLastAction then return end
+    local mode, key = GetSectorEntry(sector)
+    if not mode then return end
+    self.lastAction = { pageMode = currentPage.mode, mode = mode, key = key }
+    if not self.combatView then self:SyncCombatResume() end
+end
+
+function EmotePanel:FindRememberedSector(page)
+    local last = self.lastAction
+    if not last or last.pageMode ~= page.mode then return end
+    for sector = 1, page.count do
+        local mode, key = GetSectorEntry(sector, page)
+        if mode == last.mode and key == last.key then return sector end
+    end
+end
+
 local function IsSecureWheelAction(data)
     return data.actionType == "macro" or data.actionType == "spell" or data.actionType == "item"
 end
@@ -889,6 +906,11 @@ local function CloseAfterAction()
     if not EmotePanel.combatView and EmotePanelSavedVars.closePanelAfterAction ~= false then EmotePanel.frame:Hide() end
 end
 
+local function FinishOrdinaryAction(sector)
+    if not EmotePanel.combatView then EmotePanel:RememberAction(sector) end
+    CloseAfterAction()
+end
+
 function EmotePanel:CombatDebug(group, ...)
     if not self.combatDebug then return end
     local fields = {}
@@ -903,7 +925,7 @@ function EmotePanel:CombatDebug(group, ...)
     print(("EmotePanel debug [%s] %s"):format(group, table.concat(fields, " | ")))
 end
 
-local function ExecuteAction(mode, index, data, fromMouse)
+local function ExecuteAction(mode, index, data, fromMouse, sector)
     if data.actionType == "emote" then
         local token = GetEmoteToken(data)
         if IsFactionEmote(token) then
@@ -922,13 +944,14 @@ local function ExecuteAction(mode, index, data, fromMouse)
         elseif restricted then
             print("EmotePanel: WoW could not perform that emote.")
         end
-        if not restricted then CloseAfterAction() end
+        if not restricted then FinishOrdinaryAction(sector) end
     elseif data.actionType == "panel" then
-        CloseAfterAction()
         if data.secureClick then
+            CloseAfterAction()
             print("EmotePanel: Character Info can only open from the wheel outside combat. "
                 .. "Use WoW's Character Info keybind or the Character button in the micro menu.")
         else
+            FinishOrdinaryAction(sector)
             data.open()
         end
     elseif data.actionType == "profession" then
@@ -938,14 +961,14 @@ local function ExecuteAction(mode, index, data, fromMouse)
             if not current or current.professionID ~= index then
                 -- Let TRADE_SKILL_SHOW open the native UI after the hardware click.
                 if C_TradeSkillUI.OpenTradeSkill(index) then
-                    CloseAfterAction()
+                    FinishOrdinaryAction(sector)
                     return
                 end
                 canCraft = false
             end
         end
         if not ProfessionsFrame_LoadUI() then return end
-        CloseAfterAction()
+        FinishOrdinaryAction(sector)
         if canCraft then
             local current = C_TradeSkillUI.GetBaseProfessionInfo()
             if current and current.professionID == index then
@@ -961,13 +984,14 @@ local function ExecuteAction(mode, index, data, fromMouse)
     elseif data.actionType == "command" then
         local command = GetSlashCommand(mode, index, data)
         if not command then
+            if not EmotePanel.combatView then EmotePanel:RememberAction(sector) end
             data.run()
             CloseAfterAction()
             return
         end
         local editBox = GetAvailableChatBox()
         if not editBox then return end
-        CloseAfterAction()
+        FinishOrdinaryAction(sector)
         editBox:SetText(command)
         editBox:SendMessage()
     else
@@ -978,7 +1002,7 @@ local function ExecuteAction(mode, index, data, fromMouse)
             return
         end
         C_ChatInfo.SendChatMessage(message, channel)
-        CloseAfterAction()
+        FinishOrdinaryAction(sector)
     end
 end
 
@@ -1781,7 +1805,7 @@ function EmotePanel:ActivateSector(index, mouseButton, fromMouse)
         return
     end
     if fromMouse and mouseButton == "LeftButton" and data.actionType == "profession" and data.canCraft then
-        ExecuteAction(mode, slot, data, true)
+        ExecuteAction(mode, slot, data, true, index)
         return
     end
     if mouseButton == "LeftButton" and data.actionType == "command" and (fromMouse or data.run == ReloadUI) then
@@ -1804,7 +1828,7 @@ function EmotePanel:ActivateSector(index, mouseButton, fromMouse)
     elseif mouseButton == "RightButton" then
         self:EditButton(mode, slot, data)
     elseif mouseButton == "LeftButton" then
-        ExecuteAction(mode, slot, data)
+        ExecuteAction(mode, slot, data, nil, index)
     end
 end
 
@@ -2047,6 +2071,7 @@ function EmotePanel:CreateWheel()
         button:HookScript("PostClick", function(_, input)
             if not InCombatLockdown() then ClearAction() end
             if ranSecureAction then
+                self:RememberAction(clickedSector)
                 self:Select(clickedSector)
                 if GameTooltip:IsOwned(wheel) then GameTooltip:Hide() end
                 CloseAfterAction()
@@ -2258,7 +2283,7 @@ function EmotePanel:CreateControls()
         if self.combatView then return end
         if RefreshCarriedActionItems() then BuildCategoryPages() end
         RefreshProfessions()
-        self:ShowStartPage()
+        self:ShowStartPage(true)
     end)
     if InputDeviceIconSetManager then
         InputDeviceIconSetManager:RegisterActiveInputDeviceIconSetUpdatedCallback(self.RefreshControllerPrompts, self)
@@ -2413,7 +2438,7 @@ function EmotePanel:BuildCombatLayout()
     return pages, nested and 0 or 1
 end
 
-function EmotePanel:ShowCombatPage(index)
+function EmotePanel:ShowCombatPage(index, selection)
     local page = self.combatPages[index]
     if not self.combatView then
         self.combatView = true
@@ -2440,7 +2465,7 @@ function EmotePanel:ShowCombatPage(index)
     self.titleText:SetText(page.title)
     if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
     self.selected = nil
-    self:RefreshWheel()
+    self:RefreshWheel(selection)
 end
 
 function EmotePanel:CloseCombatDisplay()
@@ -2462,11 +2487,23 @@ function EmotePanel:ActivateCombatSector(sector, fromMouse)
     self:ActivateSector(sector, "LeftButton", fromMouse)
 end
 
-function EmotePanel:ShowStartPage()
+function EmotePanel:ShowStartPage(resume)
     if self.combatView then return end
     self.combatLayoutDirty = true
     if EmotePanelSavedVars.categoryWheel then
         categoryWheel = MakeCategoryWheel()
+    end
+    if resume and EmotePanelSavedVars.rememberLastAction and self.lastAction then
+        for index = 1, FavoritePageCount() + #categoryPages do
+            local page = GetPage(index)
+            local sector = self:FindRememberedSector(page)
+            if sector then
+                self:DisplayPage(index, page, sector)
+                return
+            end
+        end
+    end
+    if EmotePanelSavedVars.categoryWheel then
         self:DisplayPage(nil, categoryWheel, 1)
     else
         self:ShowPage(1, 1)
@@ -3591,9 +3628,21 @@ local function CreateInterfaceOptions()
     closeHelp:SetPoint("TOPLEFT", closeCheck, "BOTTOMLEFT", 0, -4)
     closeHelp:SetText("Uncheck to keep the wheel open after most actions.")
 
+    local rememberCheck = CreateFrame("CheckButton", nil, mainPanel, "UICheckButtonTemplate")
+    rememberCheck:SetSize(24, 24)
+    rememberCheck:SetPoint("TOPLEFT", closeHelp, "BOTTOMLEFT", 0, -4)
+    rememberCheck:SetScript("OnClick", function(self)
+        EmotePanelSavedVars.rememberLastAction = self:GetChecked() and true or nil
+        if not self:GetChecked() then EmotePanel.lastAction = nil end
+        EmotePanel:SyncCombatWheel(true)
+    end)
+    local rememberLabel = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    rememberLabel:SetPoint("LEFT", rememberCheck, "RIGHT", 4, 0)
+    rememberLabel:SetText("Remember last Action")
+
     local cooldownCheck = CreateFrame("CheckButton", nil, mainPanel, "UICheckButtonTemplate")
     cooldownCheck:SetSize(24, 24)
-    cooldownCheck:SetPoint("TOPLEFT", closeHelp, "BOTTOMLEFT", 0, -4)
+    cooldownCheck:SetPoint("TOPLEFT", rememberCheck, "BOTTOMLEFT", 0, -4)
     cooldownCheck:SetScript("OnClick", function(self)
         EmotePanelSavedVars.macroCooldowns = self:GetChecked() and true or nil
         EmotePanel:RefreshActionCooldowns()
@@ -3643,8 +3692,11 @@ local function CreateInterfaceOptions()
     resetGeneral:SetScript("OnClick", function()
         StaticPopup_Show("EMOTEPANEL_RESET_SETTINGS", "Restore default wheel behavior?", nil, function()
             EmotePanelSavedVars.closePanelAfterAction = nil
+            EmotePanelSavedVars.rememberLastAction = nil
             EmotePanelSavedVars.macroCooldowns = nil
+            EmotePanel.lastAction = nil
             closeCheck:SetChecked(true)
+            rememberCheck:SetChecked(false)
             cooldownCheck:SetChecked(false)
             EmotePanel:RefreshActionCooldowns()
             EmotePanel:SyncCombatWheel(true)
@@ -3653,6 +3705,7 @@ local function CreateInterfaceOptions()
 
     local function Refresh()
         closeCheck:SetChecked(EmotePanelSavedVars.closePanelAfterAction ~= false)
+        rememberCheck:SetChecked(EmotePanelSavedVars.rememberLastAction == true)
         cooldownCheck:SetChecked(EmotePanelSavedVars.macroCooldowns == true)
     end
     mainPanel:SetScript("OnShow", Refresh)
@@ -3785,6 +3838,7 @@ local function ShowHelp()
     print("  /ep help - Show this command list")
     print("|cFF00FF00Wheel controls|r")
     print("  In combat, use Open or Close Emote Panel in WoW's Keybindings for spells, items, and macros.")
+    print("  Enable Remember last Action in /ep config to reopen at the last action until logout or /reload.")
     print(("  %s / %s or %s Select."):format(
         Glyph("PADLSTICKAXIS", "Left stick"), Glyph("PADRSTICKAXIS", "Right stick"), Glyph("DIRPADVERTICAL", "D-pad up/down")))
     print(("  %s Open or use. %s Back or close."):format(Glyph("PAD1", "A"), Glyph("PAD2", "B")))

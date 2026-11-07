@@ -2954,4 +2954,106 @@ lua.execute("""
     local button = EmotePanelMinimapButton
     assert(math.abs(button.point[4]) < 0.001 and math.abs(button.point[5] - 99) < 0.001)
 """)
-print("PASS: secure combat dispatch, controller warnings and glyphs, minimap and compartment launchers, settings and resets, categories, action picker and item availability, spells, items, macros and cooldowns, group commands, entry and Favorites order, navigation, visibility, and command submission")
+lua.execute("""
+    EmotePanelSavedVars = {
+        categoryWheel = true,
+        favorites = {{mode = "emotes", index = 30}, {mode = "emotes", index = 1}},
+        selectedMacros = {["spell:" .. playerGUID .. ":991"] = true},
+        directActions = {[playerGUID] = {
+            {actionType = "spell", actionID = 991, name = "Direct Spell", icon = 9901, preview = "Spell"},
+        }},
+    }
+    gamepadState = { sticks = {{x = 0, y = 0}, {x = 0, y = 0}} }
+""")
+load_addon()
+lua.execute("""
+    local events = widgets[#widgets]
+    events.scripts.OnEvent(events, "ADDON_LOADED", "EmotePanel")
+    local panel = EmotePanel
+    local input = assert(panel.combatInput)
+    local rememberCheck
+    for _, widget in ipairs(widgets) do
+        if widget:GetText() == "Remember last Action" and widget.point[2].parent == panel.optionsPanel then
+            rememberCheck = widget.point[2]
+        end
+    end
+    assert(rememberCheck and not rememberCheck:GetChecked())
+    local function click(button)
+        input:Click(button, true)
+        input:Click(button, false)
+    end
+    local function expect(title, sector)
+        assert(panel.frame:IsShown() and panel.titleText:GetText() == title, panel.titleText:GetText())
+        assert(panel.selected == sector, tostring(panel.selected))
+    end
+
+    click("Toggle")
+    expect("Categories", 1)
+    TapWheelButton(panel, "PAD1")
+    expect("Favorites", 1)
+    TapWheelButton(panel, "PAD1")
+    click("Toggle")
+    expect("Categories", 1)
+    click("Toggle")
+    rememberCheck:SetChecked(true)
+    rememberCheck:Click("LeftButton")
+    click("Toggle")
+    expect("Categories", 1)
+    panel:CycleMode(-1)
+    expect("Actions  1 / 1", 1)
+    TapWheelButton(panel, "PAD1")
+    assert(not panel.frame:IsShown())
+    SlashCmdList.EMOTEPANEL("")
+    expect("Actions  1 / 1", 1)
+    panel:BackOrClose()
+    expect("Categories", 1)
+
+    combat = true
+    input:combatChanged("combat")
+    events.scripts.OnEvent(events, "PLAYER_REGEN_DISABLED")
+    click("Toggle")
+    expect("Actions  1 / 1", 1)
+    assert(input:GetAttribute("sector") == 1)
+    local previousRuns = #combatRuns
+    click("Accept")
+    assert(not panel.frame:IsShown() and #combatRuns == previousRuns + 1)
+    click("Toggle")
+    click("Back")
+    expect("Categories", nil)
+    secureMouseX = input:GetAttribute("wheel-x") / input:GetWidth()
+    secureMouseY = (input:GetAttribute("wheel-y") + 136) / input:GetHeight()
+    click("LeftButton")
+    expect("Favorites", nil)
+    secureMouseX = (input:GetAttribute("wheel-x") + 96) / input:GetWidth()
+    secureMouseY = (input:GetAttribute("wheel-y") + 96) / input:GetHeight()
+    click("LeftButton")
+    click("Toggle")
+    click("Toggle")
+    expect("Favorites", 2)
+    assert(input:GetAttribute("sector") == 2)
+    combat = false
+    input:combatChanged("peace")
+    events.scripts.OnEvent(events, "PLAYER_REGEN_ENABLED")
+    click("Toggle")
+    expect("Favorites", 2)
+    TapWheelButton(panel, "PAD3")
+    click("Toggle")
+    click("Toggle")
+    expect("Categories", 1)
+    TapWheelButton(panel, "PAD1")
+    TapWheelButton(panel, "PAD1")
+    assert(panel.lastAction and input:GetAttribute("resume-page") == 1)
+    assert(EmotePanelSavedVars.rememberLastAction and EmotePanelSavedVars.categoryWheel)
+    assert(#EmotePanelSavedVars.directActions[playerGUID] == 1)
+""")
+load_addon()
+lua.execute("""
+    local events = widgets[#widgets]
+    events.scripts.OnEvent(events, "ADDON_LOADED", "EmotePanel")
+    SlashCmdList.EMOTEPANEL("")
+    assert(EmotePanel.titleText:GetText() == "Categories")
+    assert(EmotePanelSavedVars.rememberLastAction and not EmotePanel.lastAction)
+    assert(not EmotePanel.combatInput:GetAttribute("resume-page"))
+    assert(#EmotePanelSavedVars.directActions[playerGUID] == 1)
+""")
+print("PASS: session-only last action, secure combat dispatch, controller warnings and glyphs, minimap and compartment launchers, settings and resets, categories, action picker and item availability, spells, items, macros and cooldowns, group commands, entry and Favorites order, navigation, visibility, and command submission")
