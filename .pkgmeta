@@ -7,3 +7,6 @@ move-folders:
 
 ignore:
   - README.md
+  - AGENTS.md
+  - summary.md
+  - tests
