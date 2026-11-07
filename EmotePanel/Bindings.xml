@@ -1,5 +1,6 @@
 <Bindings>
-    <Binding name="Open Emote Panel" category="BINDING_HEADER_EMOTEPANEL">
+    <Binding name="CLICK EmotePanelCombatInput:Toggle" runOnUp="true" category="BINDING_HEADER_EMOTEPANEL"/>
+    <Binding name="Open Emote Panel" category="BINDING_HEADER_EMOTEPANEL" hidden="true">
         EmotePanel_Toggle()
     </Binding>
 </Bindings>

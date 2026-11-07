@@ -1,90 +1,41 @@
 # EmotePanel for WoW: Forever
 
-EmotePanel is an eight-slice wheel for controller and mouse. Use it for
-regular and voiced emotes, quick Say and Party messages, game actions,
-learned professions, saved WoW macros, and shortcuts to Blizzard panels.
-It opens on **Favorites** by default. Enable **Category Wheel** to start
-on a set of category shortcuts you can show, hide, and reorder.
+EmotePanel is an eight-slot wheel for controller and mouse. Keep spells, items, saved macros, emotes, quick chat, professions, and Blizzard panel shortcuts within reach. Put your most-used entries in Favorites, or open on a Category Wheel you can arrange yourself.
 
-## Install
+## Get started
 
-Download `EmotePanel-0.21.4.zip` from the
-[EmotePanel 0.21.4 release](https://github.com/blazze11/EmotePanel/releases/tag/v0.21.4).
-Extract the `EmotePanel` folder into
-`World of Warcraft/_forever_/Interface/AddOns/`. Enable **EmotePanel** in
-the AddOns menu. If you're updating an existing installation while the game
-is open, run `/reload`.
+1. Download the Forever ZIP from [GitHub Releases](https://github.com/blazze11/EmotePanel/releases) or [CurseForge](https://www.curseforge.com/wow/addons/emote-panel/files).
+2. Extract the `EmotePanel` folder into `World of Warcraft/_forever_/Interface/AddOns/`. Enable EmotePanel in the AddOns menu and run `/reload` if you're updating while logged in.
+3. Assign **Open or Close Emote Panel** under **Options → Keybindings → Emote Panel**. Use this keybind for combat spells, items, and macros. Use `/ep` for the regular wheel.
+4. For controller play, install and enable **ConsolePort**. Turn off Blizzard's **Enable Gamepad UI** under **Options → Gameplay → Gamepad**. Gamepad (Beta) can override addon keybinds.
 
 This branch targets **WoW: Forever 1.60.1** (interface `16001`).
 
+## Build your wheel
+
+- **`/ep actions`** opens the Abilities, Items, and Macros picker. Click a row to add it and click again to remove it. Page left from Favorites or Categories to reach Actions.
+- **`/ep list`** opens Favorites in Entries. Switch sections to show, hide, edit, and reorder entries. Select a row once and use the fixed **Up / Down** buttons.
+- **`/ep categories`** sets up the optional Category Wheel. Choose which categories appear and where they go.
+- **`/ep config`** opens settings for wheel behavior, countdown numbers, controller glyphs, X/Y position, and visibility of the Help button, Close button, and keybind legend.
+
+Actions and Favorites show cooldown desaturation and red out-of-range icons when WoW reports the target is out of range. Enable **Show action cooldowns** for countdown numbers.
+
+The minimap button and **Addon Compartment** entry open the wheel with a left-click and settings with a right-click outside combat.
+
 ## Controls
-
-<img width="616" height="716" alt="wheel_preview" src="https://github.com/user-attachments/assets/c5234349-ac2c-43ed-b23b-25b30910a1a1" />
-
-Type `/ep` to open the wheel, or assign **Open or Close Emote Panel**
-under **Options → Keybindings → Emote Panel**.
 
 | Action | Controller | Mouse or keyboard |
 | --- | --- | --- |
-| Select a slice | Either stick or D-pad up/down | Hover |
+| Select a slot | Either stick or D-pad up/down | Hover |
 | Change page | LB/RB or D-pad left/right | Header arrows |
 | Use the selected entry | A / Cross | Left-click |
 | Add or remove a favorite | X / Square | Middle-click |
-| Edit an entry | Y / Triangle | Right-click |
+| Customize an entry | Y / Triangle | Right-click |
 | Go back or close the wheel | B / Circle | Back or the close button |
 | Dismiss the wheel | Start/Menu | Esc |
 
-Drag the header to move the wheel. The selected entry's message or
-action description appears below it.
-
-## Customize
-
-<img width="444" height="394" alt="custom_text" src="https://github.com/user-attachments/assets/c54b35a4-1355-4567-88e6-6bc82b51dda9" />
-
-- Open **Settings → AddOns → EmotePanel**, use the **Settings** entry
-  on the Commands wheel, or type `/ep config`.
-- Open **Categories** or type `/ep categories` to enable Category Wheel
-  and choose its visible segments and order.
-- Open **Entries** or type `/ep list` to show, hide, reorder, or edit entries.
-  Hidden entries also disappear from Favorites until you restore them.
-- Check saved WoW macros under **Macros** in Entries. Page left from
-  Favorites or Categories to reach them. In Category Wheel mode, page
-  right from the last Macros page to return to Categories. Macros run
-  directly outside combat and can be added to Favorites.
-- Add your own emotes, Say messages, Party messages, or slash commands.
-  Use the icon picker to give each entry its own icon.
-- Uncheck **Close panel after action** to keep the wheel open while
-  using entries. Opening EmotePanel settings closes the wheel.
-- The wheel starts centered. Drag its header to save a new position, or
-  enter horizontal and vertical offsets in **Wheel position**. Positive X
-  moves it right and positive Y moves it up. **Reset Position** recenters it.
-- Choose **Automatic**, **Xbox**, **PlayStation**, or **Nintendo Switch**
-  under **Controller glyphs**. Controller hints in settings, Customize
-  Entry, and the icon picker use larger glyphs and labels.
-- **Reset General**, **Reset Categories**, and **Reset Overrides** ask for
-  confirmation and reset their own settings. **Customization** explains
-  how to edit icons and text.
-
-<img width="596" height="569" alt="custom_icons" src="https://github.com/user-attachments/assets/0f9f0349-ae86-4a17-a7a9-08bb23878c41" />
-
-## Game actions
-
-Built-in commands such as Ready Check, Roll, and pull countdowns use
-WoW's own actions. Custom slash commands use chat, and an open chat
-draft is preserved. Party messages require a group. **Leave Group**
-appears in Commands while grouped. **World Map** is in Game Panels.
-
-The Professions page lists only professions learned by the current
-character. **Character Info** opens with one left-click or A / Cross press
-outside combat and follows **Close panel after action**. In combat,
-use WoW's Character Info keybind or the Character button in the micro menu.
-
-Use `/ep help` for the in-game command list.
-
-<img width="1122" height="908" alt="select_add_edit" src="https://github.com/user-attachments/assets/8e63bb03-e450-4405-8396-edab9ba32f86" />
+See the [full guide](EmotePanel/README.md) for combat behavior, customization, and every slash command. See the [changelog](CHANGELOG.md) for release details.
 
 ## AI assistance
 
-OpenAI Codex helped develop and document the Forever port. Automated
-checks use a simulated WoW UI and cannot verify every behavior in the
-live client.
+OpenAI Codex helped develop and document the Forever port. Automated checks use a simulated WoW UI. Live behavior also depends on the client and input setup.
