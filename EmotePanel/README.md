@@ -251,6 +251,4 @@ The Lua 5.1 mock checks cover both wheel layouts, mouse and controller selection
 routing, learned professions, favorite persistence and paging, saved
 messages, command submission, chat draft protection, and settings.
 
-```bash
-LUA_TEST_DEPS=/home/blazze/Documents/Codex/2026-10-16/i-wa/work/python-deps python3 work/test_emote_panel.py
-```
+From the standalone repository root, run `python3 tests/test_emote_panel.py` with Lupa's Lua 5.1 runtime.
