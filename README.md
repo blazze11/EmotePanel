@@ -8,8 +8,8 @@ on a set of category shortcuts you can show, hide, and reorder.
 
 ## Install
 
-Download `EmotePanel-0.21.2.zip` from the
-[EmotePanel 0.21.2 release](https://github.com/blazze11/EmotePanel/releases/tag/v0.21.2).
+Download `EmotePanel-0.21.4.zip` from the
+[EmotePanel 0.21.4 release](https://github.com/blazze11/EmotePanel/releases/tag/v0.21.4).
 Extract the `EmotePanel` folder into
 `World of Warcraft/_forever_/Interface/AddOns/`. Enable **EmotePanel** in
 the AddOns menu. If you're updating an existing installation while the game
@@ -54,8 +54,7 @@ action description appears below it.
 - Add your own emotes, Say messages, Party messages, or slash commands.
   Use the icon picker to give each entry its own icon.
 - Uncheck **Close panel after action** to keep the wheel open while
-  using entries. Settings and the Character Info confirmation close the
-  wheel to take focus.
+  using entries. Opening EmotePanel settings closes the wheel.
 - The wheel starts centered. Drag its header to save a new position, or
   enter horizontal and vertical offsets in **Wheel position**. Positive X
   moves it right and positive Y moves it up. **Reset Position** recenters it.
@@ -76,9 +75,9 @@ draft is preserved. Party messages require a group. **Leave Group**
 appears in Commands while grouped. **World Map** is in Game Panels.
 
 The Professions page lists only professions learned by the current
-character. To open **Character Info** from the wheel outside combat,
-select the entry and confirm with a second click or A / Cross. In
-combat, use WoW's Character Info binding or micro menu.
+character. **Character Info** opens with one left-click or A / Cross press
+outside combat and follows **Close panel after action**. In combat,
+use WoW's Character Info keybind or the Character button in the micro menu.
 
 Use `/ep help` for the in-game command list.
 

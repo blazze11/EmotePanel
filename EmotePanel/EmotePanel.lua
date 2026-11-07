@@ -357,7 +357,7 @@ local PANEL_MODES = {
 PANEL_MODES.panels = {
     title = "Game Panels",
     list = {
-        { name = "Character Info", icon = "atlas:gamepad-radial-icon-character", open = function() EmotePanel:ShowCharacterLauncher() end },
+        { name = "Character Info", icon = "atlas:gamepad-radial-icon-character", secureClick = "CharacterMicroButton" },
         { name = "Spellbook", icon = "atlas:gamepad-radial-icon-spellbook", open = function() PlayerSpellsUtil.ToggleSpellBookFrame() end },
         { name = "Talents", icon = "atlas:gamepad-radial-icon-talents", open = function() PlayerSpellsUtil.ToggleClassTalentOrSpecFrame() end },
         { name = "Legacy", icon = "atlas:gamepad-radial-icon-legacy", open = function() ToggleLegacySystemUI() end },
@@ -826,7 +826,12 @@ local function ExecuteAction(mode, index, data, fromMouse)
         CloseAfterAction()
     elseif data.actionType == "panel" then
         CloseAfterAction()
-        data.open()
+        if data.secureClick then
+            print("EmotePanel: Character Info can only open from the wheel outside combat. "
+                .. "Use WoW's Character Info keybind or the Character button in the micro menu.")
+        else
+            data.open()
+        end
     elseif data.actionType == "profession" then
         local canCraft = data.canCraft
         if fromMouse and canCraft then
@@ -944,7 +949,7 @@ StaticPopupDialogs["EMOTEPANEL_RESET_SETTINGS"] = {
     button1 = "Reset",
     button2 = "Cancel",
     OnAccept = function(_, reset) reset() end,
-    OnHide = function() EmotePanel:UpdateMacroInput() end,
+    OnHide = function() EmotePanel:UpdateSecureWheelInput() end,
     timeout = 0,
     whileDead = true,
     hideOnEscape = true,
@@ -964,61 +969,6 @@ end
 local function SkinPanel(frame)
     AddAtlas(frame, PANEL_ATLAS):SetAllPoints()
     AddAtlas(frame, PANEL_BORDER_ATLAS, "BORDER"):SetAllPoints()
-end
-
-local function CreateSecureLauncher(suffix)
-    -- A separate parent keeps protected actions out of the regular wheel.
-    -- Keep the protected button separate so the wheel can still update in combat.
-    local button = CreateFrame("Button", AddonName .. suffix, UIParent,
-        "SecureActionButtonTemplate,SecureHandlerStateTemplate,SecureHandlerShowHideTemplate")
-    button:Hide()
-    button:SetSize(290, 76)
-    button:SetPoint("CENTER")
-    button:SetFrameStrata("DIALOG")
-    button:EnableMouse(true)
-    SkinPanel(button)
-    button:SetHighlightAtlas(FOCUS_ATLAS)
-
-    local label = button:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-    label:SetPoint("CENTER")
-    button.label = label
-    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
-    button:SetAttribute("useOnKeyDown", false)
-    button:SetAttribute("_onshow", [[
-        local name = self:GetName()
-        self:SetBindingClick(true, "PAD1", name, "LeftButton")
-        self:SetBindingClick(true, "PAD2", name, "RightButton")
-        self:SetBindingClick(true, "PADFORWARD", name, "RightButton")
-    ]])
-    button:SetAttribute("_onhide", [[ self:ClearBindings() ]])
-    button:SetAttribute("_onstate-combat", [[ if newstate == "combat" then self:Hide() end ]])
-    RegisterStateDriver(button, "combat", "[combat] combat; peace")
-    button:HookScript("PostClick", function()
-        if not InCombatLockdown() then button:Hide() end
-    end)
-    table.insert(UISpecialFrames, button:GetName())
-    return button
-end
-
-function EmotePanel:ShowCharacterLauncher()
-    if InCombatLockdown() then
-        print("EmotePanel: Use WoW's Character Info binding or Character button.")
-        return
-    end
-
-    local button = self.characterLauncher
-    if not button then
-        button = CreateSecureLauncher("CharacterLauncher")
-        SetGlyphPrompt(button.label, function()
-            return ("Open Character Info\nClick or %s to open    %s Cancel"):format(
-                GamepadGlyph("PAD1", "A", 20), GamepadGlyph("PAD2", "B", 20))
-        end)
-        button:SetAttribute("*type1", "click")
-        button:SetAttribute("*clickbutton1", CharacterMicroButton)
-        self.characterLauncher = button
-    end
-    self.frame:Hide()
-    button:Show()
 end
 
 local function CreateTextButton(parent, text)
@@ -1432,8 +1382,8 @@ end
 function EmotePanel:EditButton(mode, index, data, fromSettings)
     if not self.customMessageDialog then
         self.customMessageDialog = CreateCustomMessageDialog()
-        self.customMessageDialog:HookScript("OnShow", function() self:UpdateMacroInput() end)
-        self.customMessageDialog:HookScript("OnHide", function() self:UpdateMacroInput() end)
+        self.customMessageDialog:HookScript("OnShow", function() self:UpdateSecureWheelInput() end)
+        self.customMessageDialog:HookScript("OnHide", function() self:UpdateSecureWheelInput() end)
     end
 
     local dialog = self.customMessageDialog
@@ -1573,16 +1523,16 @@ function EmotePanel:CanUseWheel()
         or IsResetPopupVisible())
 end
 
-function EmotePanel:UpdateMacroInput()
+function EmotePanel:UpdateSecureWheelInput()
     if InCombatLockdown() then return end
-    local button = self.macroInput
+    local button = self.secureWheelInput
     if self.frame:IsShown() and self:CanUseWheel() then
         for sector = 1, currentPage.count do
             local _, _, data = GetSectorEntry(sector)
-            if data.actionType == "macro" then
+            if data.secureClick or data.actionType == "macro" then
                 local x, y = self.wheel:GetCenter()
                 if not x then break end
-                button = button or self:CreateMacroInput()
+                button = button or self:CreateSecureWheelInput()
                 button:SetScale(self.wheel:GetEffectiveScale() / UIParent:GetEffectiveScale())
                 button:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y)
                 button:SetFrameLevel(self.wheel:GetFrameLevel() + 2)
@@ -1719,9 +1669,9 @@ function EmotePanel:CreateWheel()
         if mouseButton == "LeftButton" then FinishClick(TakeMouseClick(mouseButton), mouseButton, true) end
     end)
 
-    function self:CreateMacroInput()
+    function self:CreateSecureWheelInput()
         -- Keep the secure input separate from the wheel so normal pages still work in combat.
-        local button = CreateFrame("Button", AddonName .. "MacroInput", UIParent,
+        local button = CreateFrame("Button", AddonName .. "SecureWheelInput", UIParent,
             "SecureActionButtonTemplate,SecureHandlerStateTemplate,SecureHandlerShowHideTemplate")
         button:Hide()
         button:SetSize(WHEEL_SIZE, WHEEL_SIZE)
@@ -1736,13 +1686,17 @@ function EmotePanel:CreateWheel()
         button:SetAttribute("_onstate-combat", [[ if newstate == "combat" then self:Hide() end ]])
         RegisterStateDriver(button, "combat", "[combat] combat; peace")
         SetMouseScripts(button)
-        local clickedSector, ranMacro, controllerPage
-        button:HookScript("OnHide", function() controllerPage = nil end)
-        button:SetScript("PreClick", function(_, input, down)
-            clickedSector, ranMacro = nil, false
-            if InCombatLockdown() then return end
+        local function ClearAction()
             button:SetAttribute("type", nil)
             button:SetAttribute("macro", nil)
+            button:SetAttribute("clickbutton", nil)
+        end
+        local clickedSector, ranSecureAction, controllerPage
+        button:HookScript("OnHide", function() controllerPage = nil end)
+        button:SetScript("PreClick", function(_, input, down)
+            clickedSector, ranSecureAction = nil, false
+            if InCombatLockdown() then return end
+            ClearAction()
             if down then
                 if input == "WheelActivate" then controllerPage = currentPage end
                 return
@@ -1765,18 +1719,21 @@ function EmotePanel:CreateWheel()
                 clickedSector = self.selected
             end
             local _, _, data = GetSectorEntry(clickedSector)
-            if data and data.actionType == "macro" and GetMacroInfo(data.macroIndex) == data.name then
+            if not data then return end
+            local target = data.secureClick and _G[data.secureClick]
+            if target then
+                button:SetAttribute("type", "click")
+                button:SetAttribute("clickbutton", target)
+                ranSecureAction = true
+            elseif data.actionType == "macro" and GetMacroInfo(data.macroIndex) == data.name then
                 button:SetAttribute("type", "macro")
                 button:SetAttribute("macro", data.macroIndex)
-                ranMacro = true
+                ranSecureAction = true
             end
         end)
         button:HookScript("PostClick", function(_, input)
-            if not InCombatLockdown() then
-                button:SetAttribute("type", nil)
-                button:SetAttribute("macro", nil)
-            end
-            if ranMacro then
+            if not InCombatLockdown() then ClearAction() end
+            if ranSecureAction then
                 self:Select(clickedSector)
                 if GameTooltip:IsOwned(wheel) then GameTooltip:Hide() end
                 CloseAfterAction()
@@ -1784,7 +1741,7 @@ function EmotePanel:CreateWheel()
                 FinishClick(clickedSector, "LeftButton", input == "LeftButton")
             end
         end)
-        self.macroInput = button
+        self.secureWheelInput = button
         return button
     end
 end
@@ -1818,7 +1775,7 @@ function EmotePanel:RefreshWheel(selection)
         self.messagePreview:SetText("")
         self:RefreshGamepadHint()
     end
-    self:UpdateMacroInput()
+    self:UpdateSecureWheelInput()
 end
 
 function EmotePanel:CreateControls()
@@ -1836,7 +1793,7 @@ function EmotePanel:CreateControls()
     dragArea:SetScript("OnDragStop", function()
         frame:StopMovingOrSizing()
         self:SavePosition()
-        self:UpdateMacroInput()
+        self:UpdateSecureWheelInput()
     end)
 
     local caption = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
@@ -2123,7 +2080,7 @@ function EmotePanel:SetupGamepad()
         if key ~= "PAD4" or self.selected then return actions[key] end
     end
     frame:SetScript("OnGamePadButtonDown", function(_, key)
-        if key == "PAD1" and self.macroInput and self.macroInput:IsShown() then return PropagateButton(true) end
+        if key == "PAD1" and self.secureWheelInput and self.secureWheelInput:IsShown() then return PropagateButton(true) end
         local action = GetAction(key)
         if not action or (action ~= CloseForGameMenu and IsModifierKeyDown()) then return PropagateButton(true) end
         pressed[key] = action
@@ -2131,7 +2088,7 @@ function EmotePanel:SetupGamepad()
         return PropagateButton(false)
     end)
     frame:SetScript("OnGamePadButtonUp", function(_, key)
-        if key == "PAD1" and self.macroInput and self.macroInput:IsShown() then
+        if key == "PAD1" and self.secureWheelInput and self.secureWheelInput:IsShown() then
             pressed[key] = nil
             return PropagateButton(true)
         end
@@ -2197,7 +2154,7 @@ function EmotePanel:LoadPosition()
         position.x,
         position.y
     )
-    self:UpdateMacroInput()
+    self:UpdateSecureWheelInput()
 end
 
 function EmotePanel:GetPositionOffsets()
@@ -2246,7 +2203,7 @@ function EmotePanel:Initialize()
     self:RefreshWheel()
     self:LoadPosition()
     self.frame:HookScript("OnHide", function()
-        self:UpdateMacroInput()
+        self:UpdateSecureWheelInput()
         if self.customMessageDialog then self.customMessageDialog:Hide() end
         StaticPopup_Hide("EMOTEPANEL_RESET_BUTTON")
         StaticPopup_Hide("EMOTEPANEL_RESET_ALL")
@@ -2784,11 +2741,6 @@ end
 function EmotePanel_Toggle()
     local frame = EmotePanel.frame
     if not frame then return end
-    local launcher = EmotePanel.characterLauncher
-    if launcher and launcher:IsShown() then
-        if not InCombatLockdown() then launcher:Hide() end
-        return
-    end
     frame:SetShown(not frame:IsShown())
 end
 
@@ -2805,6 +2757,7 @@ local function ShowHelp()
     print(("  %s or middle-click to add or remove a favorite."):format(Glyph("PAD3", "X")))
     print("  /ep categories - Enable, show, hide, or reorder the categories on the opening wheel")
     print("  Game Panels follows Favorites. Panel shortcuts and learned professions can be favorited.")
+    print("  Character Info opens from the wheel outside combat.")
     print(("  Check saved macros in /ep list. Use %s or %s from Favorites or Categories to find them."):format(
         Glyph("PADLSHOULDER", "LB"), Glyph("PADDLEFT", "D-pad left")))
     print("  /ep config - Open settings panel")
@@ -2852,9 +2805,9 @@ SlashCmdList["EMOTEPANEL"] = HandleSlashCommand
 local function OnEvent(self, event, ...)
     if event == "PLAYER_REGEN_ENABLED" then
         if not EmotePanel.gamepadReady then EmotePanel:SetupGamepad() end
-        EmotePanel:UpdateMacroInput()
+        EmotePanel:UpdateSecureWheelInput()
     elseif event == "DISPLAY_SIZE_CHANGED" or event == "UI_SCALE_CHANGED" then
-        EmotePanel:UpdateMacroInput()
+        EmotePanel:UpdateSecureWheelInput()
     elseif event == "UPDATE_MACROS" then
         ReadMacros()
         EmotePanel:RefreshEntryPages()
