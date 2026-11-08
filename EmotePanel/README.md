@@ -1,9 +1,9 @@
 # EmotePanel 0.22.19
 
 For WoW: Forever 1.60.1 (interface 16001). Open or close the wheel with
-`/ep`, or assign **Open or Close Emote Panel** under **Options → Keybindings
-→ Emote Panel**. Existing assignments move to the secure binding the next
-time the addon loads outside combat.
+`/ep`, or assign a wheel keybind in **Controller Setup** at the top of
+`/ep config`. Existing legacy assignments move to the secure binding
+the next time the addon loads outside combat.
 
 Left-click the minimap button or the **EmotePanel** entry in the **Addon
 Compartment** to toggle the regular wheel. Right-click either for settings.
@@ -78,7 +78,7 @@ status. Logging resets on reload.
 The header, footer, and editor use built-in gamepad art. Controller glyphs
 are 32 UI units and follow the active controller icon set.
 
-By default, the wheel opens on **Favorites**. Favorites are saved account-wide
+By default, the wheel opens on **Categories**. Favorites are saved account-wide
 and continue onto more pages after the first eight. Existing custom names,
 chat messages, command slots, and panel position are preserved. **Sit**
 is added to Favorites once and can be removed like any other entry.
@@ -86,7 +86,7 @@ To reorder Favorites, open `/ep list`, select a favorite, and use the
 **Up** and **Down** buttons above the list. Moving a favorite across a page
 boundary also changes which wheel page it appears on.
 
-Enable **Open on Category Wheel** under **Settings → AddOns → EmotePanel →
+Change **Open on Category Wheel** under **Settings → AddOns → EmotePanel →
 Categories** or use `/ep categories`. The default category wheel has eight
 shortcuts: Favorites, Emotes, Voiced Emotes, Say Chat, Party Chat, Commands,
 Game Panels, and Professions. Select a category with A/Cross or left-click.
@@ -97,7 +97,7 @@ option to return to Favorites-first paging. The setting is saved account-wide.
 On the Categories settings page, select a category once and use the fixed
 **Up** or **Down** buttons. The position shows its slot on the wheel. Uncheck
 a category to hide its segment. **Reset Order** restores the default order.
-**Reset Categories** also restores visibility and turns off Category Wheel.
+**Reset Categories** restores visibility and turns on Category Wheel.
 Reordering is available while Category Wheel is enabled. The Actions
 shortcut opens with LB or D-pad left when you have entries in Actions.
 
@@ -124,8 +124,9 @@ selections are saved for the current character.
 
 Selected items appear in Actions and Favorites while carried or equipped.
 If you run out, the item stays checked in the picker as **Not carried** and
-returns to the wheel when you get another. Uncheck it there to remove it
-from the wheel even while you have none.
+returns to the wheel when you get another. Uncheck it to remove it from the
+Items list. When you carry or equip it again, it appears unchecked and you can
+add it back to the wheel.
 
 Page left from the first Favorites page or from Categories to open Actions
 on page 1. Keep paging left for page 2 and beyond. Page right from page 1
@@ -141,9 +142,9 @@ the same scope are skipped.
 Action icons in **Actions** and **Favorites** turn gray during a cooldown.
 Icons are tinted red when WoW reports the current target is too close or
 too far away. For macros, both indicators follow the spell or item WoW
-reports. Spell cooldowns skip the global cooldown. To also show time
-remaining, enable **Show action cooldowns** in `/ep config`.
-Countdown numbers are off by default, and the setting is saved account-wide.
+reports. Spell cooldowns skip the global cooldown. Countdown numbers are
+on by default. Use **Show action cooldowns** in `/ep config` to hide them.
+The setting is saved account-wide.
 
 Use **Add Emote**, **Add Say**, **Add Party**, or **Add Command** to create
 an entry in that category. Enter a name and an emote such as `/wave`, a
@@ -161,14 +162,23 @@ entry is no longer visible, the wheel uses its usual opening page.
 and help. **Automatic** follows WoW’s active icon set. You can choose Xbox,
 PlayStation, or Nintendo Switch when the client has the corresponding art.
 This changes the prompts. The physical controls keep their assignments.
-The main page links to Categories, Customization, and Entries. **Wheel
-Keybind** opens WoW's Emote Panel keybindings. **Reset General** restores
+In **Controller Setup**, click either wheel keybind slot and press a
+keyboard key or controller button. Press Esc to cancel or right-click a
+slot to clear it. Bindings save to WoW's active account or character set.
+Hover over settings controls for descriptions. **Reset General** restores
 the close-after-action, last-action, and cooldown display defaults.
+Use **Reset to Defaults** in General to clear all saved EmotePanel settings,
+custom entries and overrides, Favorites, and Action selections for every
+character on the account. Confirm outside combat to reload the UI with the
+defaults. WoW keybinds stay assigned.
 
 Under **Customization**, **Wheel Display** has separate toggles for the
 Help (?) button, Close (X) button, and keybind legend. **Wheel position**
-shows your current X and Y offsets from screen center. Positive X moves
-right, and positive Y moves up. Click **Apply** or press Enter to save.
+has two sliders that show your current position from **0%** to **100%**.
+**50%** is centered. Higher X values move the wheel right, and higher Y
+values move it up. Drag the slider or click its arrows to adjust it by
+one percentage point at a time. Changes save immediately.
+Dragging the wheel also saves its position and updates both sliders.
 **Reset Position** returns the wheel to center. **Reset All Entry Overrides**
 restores the original icons, names, and text for wheel entries.
 
@@ -178,9 +188,10 @@ applicable. Use **Show on wheel** and the fixed **Up / Down** buttons to
 adjust placement. On a controller, **X / Square** toggles visibility and
 **D-pad up/down** moves the entry. **LB / L1** opens Reset confirmation when
 available. **A / Cross** confirms and **B / Circle** backs out of the
-confirmation. In the editor, **A / Cross** saves placement and customization,
-and **B / Circle** goes back and discards the draft. Add new entries from their
-section in Entries.
+confirmation. In the editor, **A / Cross** saves placement and customization.
+**B / Circle**, **Cancel**, and the close button ask before discarding unsaved
+changes. Choose **Discard** with **A / Cross** or **Keep editing** with
+**B / Circle**. Add new entries from their section in Entries.
 
 The wheel closes when opening EmotePanel settings. The **Settings** shortcut
 is in **Commands** and can be favorited.

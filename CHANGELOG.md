@@ -1,12 +1,13 @@
 # EmotePanel changelog
 
-## 0.22.24 for WoW: Forever (unreleased)
+## 0.22.31 for WoW: Forever
 
-- Enable **Remember last Action** in General settings to reopen the wheel at the last-used entry. The checkbox is saved, and the remembered entry clears on logout or UI reload.
-- Suspend the ConsolePort interface cursor while the wheel is open, including when the cursor was opened manually.
-- Use the controller to toggle visibility, reorder entries, and confirm Reset in **Customize Entry**. The dialog shows the corresponding glyphs, including Back.
-- Swap the Chicken and Eat defaults and give every built-in entry a distinct icon within its category.
-- Rewrite the Say and Party defaults in a more casual voice and expand each category to 16 messages, including campfire conversation starters.
+- Set your wheel keybind right in **Controller Setup**. Categories and cooldown numbers are on by default, and settings have hover tips.
+- Turn on **Remember last Action** to reopen the wheel at the last entry you used during this session. The ConsolePort cursor stays out of the way while the wheel is open.
+- Say and Party each have **16 quick messages**, including campfire conversation starters. Default entries have distinct icons within each category, and Chicken and Eat swapped icons.
+- Edit wheel entries with your controller. The editor shows button prompts and asks before discarding unsaved changes.
+- Move the wheel with percentage sliders and arrow buttons. Uncheck an item marked **Not carried** to remove it from the Items list.
+- Use **Reset to Defaults** to clear EmotePanel settings and customizations for all characters and reload the UI. Your WoW keybinds stay assigned.
 
 ## 0.22.19 for WoW: Forever
 

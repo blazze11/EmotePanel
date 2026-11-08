@@ -324,8 +324,38 @@ local function SetRect(button, name, left, bottom, width, height)
     button:SetAttribute(name .. "-top", bottom + height)
 end
 
+function EmotePanel:GetWheelBinding(slot)
+    local primary, secondary = GetBindingKey(WHEEL_BINDING)
+    if slot == 1 then return primary end
+    return secondary
+end
+
 function EmotePanel:HasWheelBinding()
-    return GetBindingKey(WHEEL_BINDING) ~= nil
+    return self:GetWheelBinding(1) ~= nil
+end
+
+function EmotePanel:SetWheelBinding(slot, key)
+    if InCombatLockdown() then return false, "Set the wheel keybind outside combat." end
+    local bindingSet = GetCurrentBindingSet()
+    if bindingSet ~= 1 and bindingSet ~= 2 then return false, "No editable binding set is active." end
+    local previous = self:GetWheelBinding(slot)
+    if previous == key then return true end
+    local action = key and GetBindingAction(key)
+    if action and action ~= "" then
+        return false, GetBindingText(key) .. " is already bound to " .. GetBindingName(action) .. "."
+    end
+
+    self.migratingWheelBinding = true
+    local changed = not previous or SetBinding(previous, nil)
+    if changed and key and not SetBindingClick(key, INPUT_NAME, "Toggle") then
+        if previous then SetBindingClick(previous, INPUT_NAME, "Toggle") end
+        changed = false
+    end
+    if changed then SaveBindings(bindingSet) end
+    self.migratingWheelBinding = nil
+    self:SyncCombatWheel(true)
+    if changed then return true end
+    return false, "WoW could not save that keybind."
 end
 
 function EmotePanel:SyncCombatResume()

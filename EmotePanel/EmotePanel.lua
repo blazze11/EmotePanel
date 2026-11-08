@@ -433,6 +433,10 @@ local currentPageIndex, currentPage
 local favorites, visibleFavorites
 local grouped
 
+local function IsCategoryWheelEnabled()
+    return EmotePanelSavedVars.categoryWheel ~= false
+end
+
 local function GetStorageMode(category)
     return category == "voicedEmotes" and "emotes" or category
 end
@@ -1056,6 +1060,17 @@ StaticPopupDialogs["EMOTEPANEL_RESET_BUTTON"] = {
     preferredIndex = 3,
 }
 
+StaticPopupDialogs["EMOTEPANEL_DISCARD_ENTRY"] = {
+    text = "Discard your unsaved changes?\n\n%s",
+    button1 = "Discard",
+    button2 = "Keep editing",
+    OnAccept = function(_, dialog) dialog:Hide() end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
+
 StaticPopupDialogs["EMOTEPANEL_RESET_ALL"] = {
     text = "Reset custom icons, names, and text on wheel entries?",
     button1 = "Yes",
@@ -1082,6 +1097,8 @@ StaticPopupDialogs["EMOTEPANEL_RESET_ALL"] = {
     preferredIndex = 3,
 }
 
+local resetOnLogout
+
 StaticPopupDialogs["EMOTEPANEL_RESET_SETTINGS"] = {
     text = "%s",
     button1 = "Reset",
@@ -1097,7 +1114,7 @@ StaticPopupDialogs["EMOTEPANEL_RESET_SETTINGS"] = {
 local function PrintLoginWarnings()
     local warnings = {}
     if not EmotePanel:HasWheelBinding() then
-        warnings[#warnings + 1] = "No wheel keybind is set. Assign Open or Close Emote Panel in Options > Keybindings > Emote Panel."
+        warnings[#warnings + 1] = "No wheel keybind is set. Assign Open or Close Emote Panel in /ep config under Controller Setup."
     end
 
     local native = InputUtil.IsGamepadUIEnabled()
@@ -1115,9 +1132,23 @@ local function PrintLoginWarnings()
     end
 end
 
-local function IsResetPopupVisible()
-    return StaticPopup_Visible("EMOTEPANEL_RESET_BUTTON") or StaticPopup_Visible("EMOTEPANEL_RESET_ALL")
+local function IsWheelPopupVisible()
+    return StaticPopup_Visible("EMOTEPANEL_DISCARD_ENTRY") or StaticPopup_Visible("EMOTEPANEL_RESET_BUTTON")
+        or StaticPopup_Visible("EMOTEPANEL_RESET_ALL")
         or StaticPopup_Visible("EMOTEPANEL_RESET_SETTINGS")
+end
+
+local function FindEditorConfirmation()
+    return StaticPopup_FindVisible("EMOTEPANEL_DISCARD_ENTRY") or StaticPopup_FindVisible("EMOTEPANEL_RESET_BUTTON")
+end
+
+local function ShowEditorConfirmation(dialog, which, data)
+    dialog.nameBox:ClearFocus()
+    dialog.messageBox:ClearFocus()
+    local popup = StaticPopupDialogs[which]
+    local hint = ("%s %s    %s %s"):format(
+        GamepadGlyph("PAD1", "A"), popup.button1, GamepadGlyph("PAD2", "B"), popup.button2)
+    StaticPopup_Show(which, hint, nil, data)
 end
 local function AddAtlas(parent, atlas, layer)
     local texture = parent:CreateTexture(nil, layer or "BACKGROUND")
@@ -1144,6 +1175,31 @@ local function CreateTextButton(parent, text)
     return button
 end
 
+local function AddSettingsTooltip(control, title, text, label)
+    local function Show(owner)
+        GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+        GameTooltip:SetText(title)
+        GameTooltip:AddLine(text, 1, 1, 1, true)
+        GameTooltip:Show()
+    end
+    local function Hide(owner)
+        if GameTooltip:IsOwned(owner) then GameTooltip:Hide() end
+    end
+    local function Bind(target)
+        target:HookScript("OnEnter", Show)
+        target:HookScript("OnLeave", Hide)
+        target:HookScript("OnHide", Hide)
+    end
+    Bind(control)
+    if label then
+        local hover = CreateFrame("Frame", nil, control:GetParent())
+        hover:SetAllPoints(label)
+        hover:EnableMouseMotion(true)
+        hover:SetAttribute("nodeignore", true)
+        Bind(hover)
+    end
+end
+
 local function CreateCloseButton(frame)
     local close = CreateFrame("Button", nil, frame)
     close:SetSize(30, 30)
@@ -1167,6 +1223,7 @@ local function CreateEditorField(dialog, labelText, y, maxLetters)
     box:SetTextInsets(10, 10, 0, 0)
     box:SetAutoFocus(false)
     box:SetMaxLetters(maxLetters)
+    AddSettingsTooltip(box, labelText, labelText == "Name" and "Set the name shown on the wheel." or "Edit the message or command sent by this entry.", label)
     SkinPanel(box)
 
     local focus = AddAtlas(box, FOCUS_ATLAS, "BORDER")
@@ -1394,7 +1451,8 @@ local function CreateCustomMessageDialog()
     dialog:EnableMouse(true)
     dialog:SetAttribute("nodeignore", true)
     SkinPanel(dialog)
-    CreateCloseButton(dialog)
+    dialog.closeButton = CreateCloseButton(dialog)
+    AddSettingsTooltip(dialog.closeButton, "Close", "Close the editor. You will be asked before discarding changes.")
 
     local title = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
     title:SetPoint("TOP", 0, -18)
@@ -1409,11 +1467,13 @@ local function CreateCustomMessageDialog()
         messageBox:ClearFocus()
         if dialog.picker then dialog.picker:Hide() end
         StaticPopup_Hide("EMOTEPANEL_RESET_BUTTON")
+        StaticPopup_Hide("EMOTEPANEL_DISCARD_ENTRY")
     end)
 
     local iconButton = CreateTextButton(dialog, "Choose Icon")
     iconButton:SetSize(142, 30)
     iconButton:SetPoint("TOP", 20, -180)
+    AddSettingsTooltip(iconButton, "Choose Icon", "Choose artwork from the wheel icons or WoW's icon library.")
     local icon = dialog:CreateTexture(nil, "ARTWORK")
     icon:SetSize(30, 30)
     icon:SetPoint("RIGHT", iconButton, "LEFT", -8, 0)
@@ -1438,14 +1498,17 @@ local function CreateCustomMessageDialog()
     local showLabel = placement:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     showLabel:SetPoint("LEFT", show, "RIGHT", 4, 0)
     showLabel:SetText("Show on wheel")
+    AddSettingsTooltip(show, "Show on wheel", "Choose whether this entry appears on the wheel. Save to apply the change.", showLabel)
     local up = CreateTextButton(placement, "Up")
     up:SetSize(40, 24)
     up:SetPoint("TOPLEFT", 0, -77)
     up:SetDisabledFontObject(GameFontDisable)
+    AddSettingsTooltip(up, "Move up", "Move this entry one place earlier. Save to apply the change.")
     local down = CreateTextButton(placement, "Down")
     down:SetSize(48, 24)
     down:SetPoint("LEFT", up, "RIGHT", 4, 0)
     down:SetDisabledFontObject(GameFontDisable)
+    AddSettingsTooltip(down, "Move down", "Move this entry one place later. Save to apply the change.")
     local moveLabel = placement:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     moveLabel:SetPoint("LEFT", down, "RIGHT", 8, 0)
     placement.location, placement.show = location, show
@@ -1465,18 +1528,21 @@ local function CreateCustomMessageDialog()
     local saveButton = CreateTextButton(dialog, "Save")
     saveButton:SetSize(86, 28)
     saveButton:SetPoint("BOTTOMLEFT", 22, 16)
+    AddSettingsTooltip(saveButton, "Save", "Apply the icon, text, and placement changes.")
     local resetButton = CreateTextButton(dialog, "Reset")
     resetButton:SetSize(86, 28)
     resetButton:SetPoint("BOTTOM", 0, 16)
+    AddSettingsTooltip(resetButton, "Reset", "Restore this entry's default icon, name, and text.")
     local cancelButton = CreateTextButton(dialog, "Cancel")
     cancelButton:SetSize(86, 28)
     cancelButton:SetPoint("BOTTOMRIGHT", -22, 16)
-    cancelButton:SetScript("OnClick", function() dialog:Hide() end)
+    AddSettingsTooltip(cancelButton, "Cancel", "Close the editor. You will be asked before discarding changes.")
 
     dialog.nameBox = nameBox
     dialog.messageBox = messageBox
     dialog.saveButton = saveButton
     dialog.resetButton = resetButton
+    dialog.cancelButton = cancelButton
     dialog.iconButton = iconButton
     dialog.icon = icon
     local placementHint = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
@@ -1641,7 +1707,9 @@ local function SetupPlacement(controls, category, context, mode, index, data)
     local favoriteIndex = FindFavorite(mode, index)
     local favorite = favoriteIndex and favorites[favoriteIndex]
     local entry = context == "favorites" and favorite or index
-    local order = GetPlacementOrder(context)
+    local originalOrder = GetPlacementOrder(context)
+    local order = {}
+    for position, id in ipairs(originalOrder) do order[position] = id end
     local swaps = {}
     local originallyShown = not IsEntryHidden(mode, index)
     controls.show:SetChecked(originallyShown)
@@ -1708,11 +1776,20 @@ local function SetupPlacement(controls, category, context, mode, index, data)
     controls.down:SetScript("OnClick", function() Move(nextEntry) end)
     RefreshPlacement()
 
-    return function(categoryChanged)
+    local function IsReordered()
+        for position, id in ipairs(order) do
+            if originalOrder[position] ~= id then return true end
+        end
+        return false
+    end
+    local function VisibilityChanged()
+        return (not not controls.show:GetChecked()) ~= originallyShown
+    end
+    local function SavePlacement(categoryChanged)
         local shown = not not controls.show:GetChecked()
         if shown ~= originallyShown then SaveEntryVisibility(mode, index, shown) end
         local reordered = false
-        if #swaps > 0 and (not categoryChanged or context == "favorites") then
+        if (not categoryChanged or context == "favorites") and IsReordered() then
             local saved = context == "favorites" and favorites or GetPlacementOrder(context)
             for _, neighbor in ipairs(swaps) do
                 if SwapOrder(saved, entry, neighbor) then reordered = true end
@@ -1721,6 +1798,7 @@ local function SetupPlacement(controls, category, context, mode, index, data)
         end
         return reordered or shown ~= originallyShown
     end
+    return SavePlacement, function() return VisibilityChanged() or IsReordered() end
 end
 
 local function RevealEditedEntry(panel, context, mode, index)
@@ -1755,6 +1833,8 @@ function EmotePanel:EditButton(mode, index, data, fromSettings, context)
     end
 
     local dialog = self.customMessageDialog
+    StaticPopup_Hide("EMOTEPANEL_RESET_BUTTON")
+    StaticPopup_Hide("EMOTEPANEL_DISCARD_ENTRY")
     self:SetupEditorGamepad()
     dialog.fromSettings = fromSettings
     local creating = index == nil
@@ -1769,13 +1849,13 @@ function EmotePanel:EditButton(mode, index, data, fromSettings, context)
     dialog.errorText:SetPoint("BOTTOM", 0, creating and 86 or 120)
     dialog.placement:SetShown(not creating)
     dialog.placementHint:SetShown(not creating)
-    local savePlacement
+    local savePlacement, hasPlacementChanges
     if not creating then
         local category = mode == "emotes" and voicedEmoteTokens[GetEmoteToken(data)] == true and "voicedEmotes" or mode
         context = context or (not fromSettings and currentPage.mode == "favorites" and "favorites") or category
         dialog.placement:ClearAllPoints()
         dialog.placement:SetPoint("TOPLEFT", dialog, "TOPLEFT", 22, -iconTop - 38)
-        savePlacement = SetupPlacement(dialog.placement, category, context, mode, index, data)
+        savePlacement, hasPlacementChanges = SetupPlacement(dialog.placement, category, context, mode, index, data)
     end
     dialog.nameBox:SetShown(editableText)
     dialog.nameBox.label:SetShown(editableText)
@@ -1792,8 +1872,21 @@ function EmotePanel:EditButton(mode, index, data, fromSettings, context)
     dialog.nameBox:SetText(previousName)
     dialog.messageBox:SetText(previousMessage)
     dialog.defaultIcon = GetIconPath(data.custom and customEntryTypes[mode].icon or data.icon)
-    dialog.pendingIcon = GetEntryIcon(mode, index, data)
+    local previousIcon = GetEntryIcon(mode, index, data)
+    dialog.pendingIcon = previousIcon
     SetIconTexture(dialog.icon, dialog.pendingIcon)
+    local function RequestClose()
+        if FindEditorConfirmation() then return end
+        local textChanged = editableText and (dialog.nameBox:GetText() ~= previousName
+            or dialog.messageBox:GetText() ~= previousMessage)
+        if textChanged or dialog.pendingIcon ~= previousIcon or (hasPlacementChanges and hasPlacementChanges()) then
+            ShowEditorConfirmation(dialog, "EMOTEPANEL_DISCARD_ENTRY", dialog)
+        else
+            dialog:Hide()
+        end
+    end
+    dialog.closeButton:SetScript("OnClick", RequestClose)
+    dialog.cancelButton:SetScript("OnClick", RequestClose)
     dialog.saveButton:SetScript("OnClick", function()
         if savePlacement and InCombatLockdown() then
             dialog.errorText:SetText("Save entry changes after combat.")
@@ -1856,10 +1949,8 @@ function EmotePanel:EditButton(mode, index, data, fromSettings, context)
     end)
     dialog.errorText:SetText("")
     dialog.resetButton:SetScript("OnClick", function()
-        dialog.nameBox:ClearFocus()
-        dialog.messageBox:ClearFocus()
-        local hint = ("%s Yes    %s No"):format(GamepadGlyph("PAD1", "A"), GamepadGlyph("PAD2", "B"))
-        StaticPopup_Show("EMOTEPANEL_RESET_BUTTON", hint, nil, {
+        if FindEditorConfirmation() then return end
+        ShowEditorConfirmation(dialog, "EMOTEPANEL_RESET_BUTTON", {
             mode = mode,
             index = index,
             dialog = dialog,
@@ -1912,7 +2003,7 @@ end
 
 function EmotePanel:CanUseWheel()
     return not ((self.customMessageDialog and self.customMessageDialog:IsShown())
-        or IsResetPopupVisible())
+        or IsWheelPopupVisible())
 end
 
 function EmotePanel:UpdateSecureWheelInput()
@@ -2199,7 +2290,7 @@ end
 
 function EmotePanel:RefreshActionCooldowns()
     local shown = self.frame:IsShown()
-    local showNumbers = EmotePanelSavedVars.macroCooldowns == true
+    local showNumbers = EmotePanelSavedVars.macroCooldowns ~= false
     for index, slot in ipairs(self.slots) do
         local data = shown and select(3, GetSectorEntry(index))
         local active = false
@@ -2420,7 +2511,7 @@ function EmotePanel:RefreshGamepadHint()
                 .. "    " .. GamepadGlyph("PAD4", "Y") .. " Edit"
         end
         actions = actions .. "    "
-    elseif currentPage == professionPage or EmotePanelSavedVars.categoryWheel then
+    elseif currentPage == professionPage or IsCategoryWheelEnabled() then
         actions = ""
     else
         actions = "Browse pages and press " .. GamepadGlyph("PAD3", "X") .. " to add    "
@@ -2432,7 +2523,7 @@ function EmotePanel:DisplayPage(index, page, selection)
     if self.combatView then return end
     currentPageIndex = index
     currentPage = page
-    local nested = EmotePanelSavedVars.categoryWheel
+    local nested = IsCategoryWheelEnabled()
     local inCategory = nested and page ~= categoryWheel
     local canPage = not nested
     local actionsShortcut = nested and page.mode == "macros"
@@ -2462,7 +2553,7 @@ local function MakeCategoryWheel()
 end
 
 function EmotePanel:BuildCombatLayout()
-    local pages, nested = {}, EmotePanelSavedVars.categoryWheel == true
+    local pages, nested = {}, IsCategoryWheelEnabled()
     local last = FavoritePageCount() + #categoryPages
     local function AddPage(id, source)
         local page = { mode = source.mode, count = source.count, title = source.title, snapshot = {}, actions = {} }
@@ -2569,7 +2660,7 @@ end
 function EmotePanel:ShowStartPage(resume)
     if self.combatView then return end
     self.combatLayoutDirty = true
-    if EmotePanelSavedVars.categoryWheel then
+    if IsCategoryWheelEnabled() then
         categoryWheel = MakeCategoryWheel()
     end
     if resume and EmotePanelSavedVars.rememberLastAction and self.lastAction then
@@ -2582,7 +2673,7 @@ function EmotePanel:ShowStartPage(resume)
             end
         end
     end
-    if EmotePanelSavedVars.categoryWheel then
+    if IsCategoryWheelEnabled() then
         self:DisplayPage(nil, categoryWheel, 1)
     else
         self:ShowPage(1, 1)
@@ -2590,7 +2681,7 @@ function EmotePanel:ShowStartPage(resume)
 end
 
 function EmotePanel:BackOrClose()
-    if EmotePanelSavedVars.categoryWheel and currentPage ~= categoryWheel then
+    if IsCategoryWheelEnabled() and currentPage ~= categoryWheel then
         local category = currentPage.category or currentPage.mode
         for index, id in ipairs(categoryWheel.entries) do
             if id == category then
@@ -2612,6 +2703,11 @@ function EmotePanel:RefreshEntryPages()
     self:ShowStartPage()
 end
 
+local function RefreshActionPicker(kind)
+    local picker = _G[AddonName .. "ActionsPanel"]
+    if picker and picker:IsVisible() and picker.kind == kind then picker:refresh() end
+end
+
 function EmotePanel:SetActionSelected(key, data, selected)
     local saved = EmotePanelSavedVars
     if selected and not actionsByID[key] then
@@ -2624,6 +2720,7 @@ function EmotePanel:SetActionSelected(key, data, selected)
     self:RefreshEntryPages()
     local helpPanel = _G[AddonName .. "HelpPanel"]
     if helpPanel and helpPanel:IsVisible() then helpPanel:refresh() end
+    if data and data.actionType == "item" then RefreshActionPicker("item") end
 end
 
 function EmotePanel:RefreshCurrentEntryPages()
@@ -2645,7 +2742,7 @@ function EmotePanel:RefreshCurrentEntryPages()
     if newFirst then
         local page = actions and math.max(newFirst, newLast - pageOffset) or math.min(newFirst + pageOffset, newLast)
         self:ShowPage(page, self.selected)
-    elseif first and EmotePanelSavedVars.categoryWheel and not actions then
+    elseif first and IsCategoryWheelEnabled() and not actions then
         self:DisplayPage(nil, { mode = category, title = PANEL_MODES[category].title, count = 0 })
     elseif first then
         self:ShowStartPage()
@@ -2669,7 +2766,7 @@ function EmotePanel:CycleMode(direction)
     end
     if not currentPageIndex then return end
     local first, last = 1, FavoritePageCount() + #categoryPages
-    if EmotePanelSavedVars.categoryWheel then
+    if IsCategoryWheelEnabled() then
         first, last = GetCategoryPageRange(currentPage.category or currentPage.mode)
         if currentPage.mode == "macros" then
             local nextPage = currentPageIndex + direction
@@ -2736,7 +2833,7 @@ function EmotePanel:SetupGamepad()
     }
     local editorActions = {
         PAD1 = function() self.customMessageDialog.saveButton:Click() end,
-        PAD2 = function() self.customMessageDialog:Hide() end,
+        PAD2 = function() self.customMessageDialog.cancelButton:Click() end,
         PAD4 = function() self.customMessageDialog.iconButton:Click() end,
     }
     local placementActions = {
@@ -2749,13 +2846,19 @@ function EmotePanel:SetupGamepad()
         PADDDOWN = function() self.customMessageDialog.placement.down:Click() end,
     }
     local function ResetEntry() self.customMessageDialog.resetButton:Click() end
-    local function ClickResetConfirmation(index)
-        local popup = StaticPopup_FindVisible("EMOTEPANEL_RESET_BUTTON")
+    local function ClickEditorConfirmation(which, index)
+        local popup = StaticPopup_FindVisible(which)
         if popup then StaticPopup_OnClick(popup, index) end
     end
-    local resetActions = {
-        PAD1 = function() ClickResetConfirmation(1) end,
-        PAD2 = function() ClickResetConfirmation(2) end,
+    local confirmationActions = {
+        EMOTEPANEL_RESET_BUTTON = {
+            PAD1 = function() ClickEditorConfirmation("EMOTEPANEL_RESET_BUTTON", 1) end,
+            PAD2 = function() ClickEditorConfirmation("EMOTEPANEL_RESET_BUTTON", 2) end,
+        },
+        EMOTEPANEL_DISCARD_ENTRY = {
+            PAD1 = function() ClickEditorConfirmation("EMOTEPANEL_DISCARD_ENTRY", 1) end,
+            PAD2 = function() ClickEditorConfirmation("EMOTEPANEL_DISCARD_ENTRY", 2) end,
+        },
     }
     local pickerActions = {
         PADDUP = function() self.customMessageDialog.picker:MoveSelection(-8) end,
@@ -2773,9 +2876,13 @@ function EmotePanel:SetupGamepad()
             return CloseForGameMenu
         end
         local dialog = self.customMessageDialog
-        if dialog and dialog:IsShown() and StaticPopup_Visible("EMOTEPANEL_RESET_BUTTON") then return resetActions[key] end
-        if IsResetPopupVisible() then return end
-        if dialog and dialog:IsShown() then
+        local editing = dialog and dialog:IsShown()
+        if editing then
+            local popup = FindEditorConfirmation()
+            if popup then return confirmationActions[popup.which][key] end
+        end
+        if IsWheelPopupVisible() then return end
+        if editing then
             if dialog.picker and dialog.picker:IsShown() then return pickerActions[key] end
             if dialog.nameBox:HasFocus() or dialog.messageBox:HasFocus() then return end
             if key == "PADLSHOULDER" and dialog.resetButton:IsShown() then return ResetEntry end
@@ -2838,17 +2945,27 @@ function EmotePanel:SetupGamepad()
     self.gamepadReady = true
 end
 
+local function RoundOffset(value)
+    if value < 0 then return math.ceil(value - 0.5) end
+    return math.floor(value + 0.5)
+end
+
 function EmotePanel:SavePosition()
     if not EmotePanelSavedVars then EmotePanelSavedVars = {} end
     if not EmotePanelSavedVars.positions then EmotePanelSavedVars.positions = {} end
 
     local point, _, relativePoint, x, y = self.frame:GetPoint()
-    EmotePanelSavedVars.positions.emotePanel = {
+    local position = {
         point = point,
         relativePoint = relativePoint,
-        x = x,
-        y = y
+        x = RoundOffset(x),
+        y = RoundOffset(y),
     }
+    EmotePanelSavedVars.positions.emotePanel = position
+    if position.x ~= x or position.y ~= y then
+        self.frame:ClearAllPoints()
+        self.frame:SetPoint(point, UIParent, relativePoint, position.x, position.y)
+    end
     if self.customizationPanel then self.customizationPanel:refreshPosition() end
     self:SyncCombatWheel(true)
 end
@@ -2885,9 +3002,13 @@ function EmotePanel:GetPositionOffsets()
     return x, y
 end
 
+local function GetPositionLimits(frame)
+    return math.max(0, math.floor((UIParent:GetWidth() - frame:GetWidth()) / 2)),
+        math.max(0, math.floor((UIParent:GetHeight() - frame:GetHeight()) / 2))
+end
+
 function EmotePanel:SetPositionOffsets(x, y)
-    local maxX = math.max(0, (UIParent:GetWidth() - self.frame:GetWidth()) / 2)
-    local maxY = math.max(0, (UIParent:GetHeight() - self.frame:GetHeight()) / 2)
+    local maxX, maxY = GetPositionLimits(self.frame)
     EmotePanelSavedVars.positions.emotePanel = {
         point = "CENTER", relativePoint = "CENTER",
         x = math.max(-maxX, math.min(x, maxX)),
@@ -3006,10 +3127,13 @@ local function GetActionChoices(kind)
         end
     end
 
-    -- Keep saved entries selectable even while unavailable, including entries added by older builds.
+    -- Keep unavailable items visible only while selected, so players can uncheck them.
     for _, key in ipairs(actionIDs) do
         local data = actionsByID[key]
-        if data and data.actionType == kind then Add(key, data) end
+        if data and data.actionType == kind
+            and (kind ~= "item" or carriedActionItems[data.actionID] or not IsEntryHidden("macros", key)) then
+            Add(key, data)
+        end
     end
     table.sort(choices, function(a, b)
         if a.data.name == b.data.name then return a.key < b.key end
@@ -3042,11 +3166,16 @@ local function CreateActionPicker(mainPanel)
     scroll:SetScrollChild(content)
     local rows, tabs = {}, {}
     local firstTab
-    for _, tab in ipairs({{"spell", "Abilities"}, {"item", "Items"}, {"macro", "Macros"}}) do
-        local kind, label = unpack(tab)
+    for _, tab in ipairs({
+        {"spell", "Abilities", "Choose learned spells for the Actions wheel."},
+        {"item", "Items", "Choose carried or equipped items for the Actions wheel."},
+        {"macro", "Macros", "Choose saved account or character macros for the Actions wheel."},
+    }) do
+        local kind, label, tooltip = unpack(tab)
         local button = CreateTextButton(panel, label)
         button:SetSize(96, 25)
         button:SetDisabledFontObject(GameFontDisable)
+        AddSettingsTooltip(button, label, tooltip)
         button:SetPoint("TOPLEFT", description, "BOTTOMLEFT", #tabs * 102, -10)
         button:SetScript("OnClick", function()
             panel.kind = kind
@@ -3080,6 +3209,7 @@ local function CreateActionPicker(mainPanel)
                 row.label:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
                 row.label:SetJustifyH("LEFT")
                 row.label:SetWordWrap(false)
+                AddSettingsTooltip(row, "Show in Actions", "Check to add this action to the wheel. Uncheck to remove it.")
                 row:SetScript("OnClick", function(button)
                     local entry = button.choice
                     EmotePanel:SetActionSelected(entry.key, entry.data, button:GetChecked())
@@ -3124,6 +3254,7 @@ local function CreateHelpPanel(mainPanel)
     local sectionPicker = CreateFrame("DropdownButton", AddonName .. "EntrySection", helpPanel, "WowStyle1DropdownTemplate")
     sectionPicker:SetWidth(168)
     sectionPicker:SetPoint("TOPLEFT", helpTitle, "BOTTOMLEFT", 0, -10)
+    AddSettingsTooltip(sectionPicker, "Entry section", "Choose which group of wheel entries to view or edit.")
     sectionPicker:SetupMenu(function(_, root)
         for _, mode in ipairs(listModes) do
             local name = mode == "macros" and ACTIONS_TITLE
@@ -3136,6 +3267,7 @@ local function CreateHelpPanel(mainPanel)
     local sectionAction = CreateTextButton(helpPanel, "Choose Actions")
     sectionAction:SetSize(112, 24)
     sectionAction:SetPoint("LEFT", sectionPicker, "RIGHT", 8, 0)
+    AddSettingsTooltip(sectionAction, "Manage entries", "Add a custom entry to this section or choose spells, items, and macros for Actions.")
     sectionAction:SetScript("OnClick", function()
         if section == "macros" then
             if EmotePanel.combatView then return end
@@ -3149,6 +3281,7 @@ local function CreateHelpPanel(mainPanel)
     resetOrder:SetSize(100, 24)
     resetOrder:SetPoint("LEFT", sectionPicker, "RIGHT", 128, 0)
     resetOrder:SetDisabledFontObject(GameFontDisable)
+    AddSettingsTooltip(resetOrder, "Reset Order", "Restore the selected section's default entry order.")
     resetOrder:SetScript("OnClick", function()
         EmotePanelSavedVars.entryOrder[section] = nil
         EmotePanel:RefreshEntryPages()
@@ -3159,10 +3292,12 @@ local function CreateHelpPanel(mainPanel)
     up:SetSize(48, 24)
     up:SetPoint("TOPLEFT", sectionPicker, "BOTTOMLEFT", 0, -8)
     up:SetDisabledFontObject(GameFontDisable)
+    AddSettingsTooltip(up, "Move up", "Move the selected entry one place earlier in this section.")
     local down = CreateTextButton(helpPanel, "Down")
     down:SetSize(56, 24)
     down:SetPoint("LEFT", up, "RIGHT", 4, 0)
     down:SetDisabledFontObject(GameFontDisable)
+    AddSettingsTooltip(down, "Move down", "Move the selected entry one place later in this section.")
     local moveHint = helpPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     moveHint:SetPoint("LEFT", down, "RIGHT", 8, 0)
     moveHint:SetText("Move selected entry")
@@ -3245,9 +3380,11 @@ local function CreateHelpPanel(mainPanel)
         row.name:SetJustifyH("LEFT")
         row.name:SetWordWrap(true)
         row.name:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
+        AddSettingsTooltip(row, "Favorite", "Select this favorite to move it up or down.")
         local edit = CreateTextButton(row, "Edit")
         edit:SetSize(54, 24)
         edit:SetPoint("RIGHT")
+        AddSettingsTooltip(edit, "Edit entry", "Customize this entry's icon, text, or wheel placement.")
         edit:SetScript("OnClick", function()
             local entry = row.favoriteEntry
             local data = GetEntryData(entry.mode, entry.index)
@@ -3299,6 +3436,7 @@ local function CreateHelpPanel(mainPanel)
         local check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
         check:SetSize(24, 24)
         check:SetPoint("LEFT")
+        AddSettingsTooltip(check, "Show on wheel", "Choose whether this entry appears on the wheel.")
         check:SetScript("OnClick", function(self)
             if mode == "macros" then
                 EmotePanel:SetActionSelected(index, GetEntryData(mode, index), self:GetChecked())
@@ -3313,9 +3451,11 @@ local function CreateHelpPanel(mainPanel)
         row.label:SetJustifyH("LEFT")
         row.label:SetWordWrap(true)
         row.label:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
+        AddSettingsTooltip(row, "Wheel entry", "Select this entry to move it up or down.")
         local edit = CreateTextButton(row, "Edit")
         edit:SetSize(54, 24)
         edit:SetPoint("RIGHT")
+        AddSettingsTooltip(edit, "Edit entry", "Customize this entry's icon, text, or wheel placement.")
         edit:SetScript("OnClick", function()
             local data = GetEntryData(mode, index)
             if data then EmotePanel:EditButton(mode, index, data, true, category) end
@@ -3419,6 +3559,7 @@ local function CreateCategoriesPanel(mainPanel)
     local toggleLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     toggleLabel:SetPoint("LEFT", toggle, "RIGHT", 4, 0)
     toggleLabel:SetText("Open on Category Wheel")
+    AddSettingsTooltip(toggle, "Open on Category Wheel", "Start on the category shortcuts. Turn this off to start on Favorites.", toggleLabel)
 
     local description = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     description:SetPoint("TOPLEFT", toggle, "BOTTOMLEFT", 0, -10)
@@ -3429,14 +3570,16 @@ local function CreateCategoriesPanel(mainPanel)
     up:SetSize(48, 24)
     up:SetPoint("TOPLEFT", description, "BOTTOMLEFT", 0, -8)
     up:SetDisabledFontObject(GameFontDisable)
+    AddSettingsTooltip(up, "Move up", "Move the selected category one place earlier on the wheel.")
     local down = CreateTextButton(panel, "Down")
     down:SetSize(56, 24)
     down:SetPoint("LEFT", up, "RIGHT", 4, 0)
     down:SetDisabledFontObject(GameFontDisable)
+    AddSettingsTooltip(down, "Move down", "Move the selected category one place later on the wheel.")
     local placement = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     placement:SetPoint("LEFT", down, "RIGHT", 8, 0)
     local function MoveSelected(step)
-        if not selected or not EmotePanelSavedVars.categoryWheel then return end
+        if not selected or not IsCategoryWheelEnabled() then return end
         local order = GetOrderedEntryIDs("categories")
         for position, id in ipairs(order) do
             if id == selected and MoveOrderedEntry("categories", id, order[position + step]) then
@@ -3453,8 +3596,9 @@ local function CreateCategoriesPanel(mainPanel)
     reset:SetSize(100, 24)
     reset:SetPoint("TOPLEFT", 16, -386)
     reset:SetDisabledFontObject(GameFontDisable)
+    AddSettingsTooltip(reset, "Reset Order", "Restore the stock category order.")
     reset:SetScript("OnClick", function()
-        if not EmotePanelSavedVars.categoryWheel then return end
+        if not IsCategoryWheelEnabled() then return end
         EmotePanelSavedVars.entryOrder.categories = nil
         panel:refresh()
         EmotePanel:ShowStartPage()
@@ -3462,9 +3606,10 @@ local function CreateCategoriesPanel(mainPanel)
     local resetCategories = CreateTextButton(panel, "Reset Categories")
     resetCategories:SetSize(128, 24)
     resetCategories:SetPoint("LEFT", reset, "RIGHT", 8, 0)
+    AddSettingsTooltip(resetCategories, "Reset Categories", "Turn on the Category Wheel and restore its stock order and visibility.")
     resetCategories:SetScript("OnClick", function()
         StaticPopup_Show("EMOTEPANEL_RESET_SETTINGS",
-            "Turn off Category Wheel and restore its default category order and visibility?", nil, function()
+            "Turn on Category Wheel and restore its default category order and visibility?", nil, function()
                 EmotePanelSavedVars.categoryWheel = nil
                 EmotePanelSavedVars.hiddenEntries.categories = nil
                 EmotePanelSavedVars.entryOrder.categories = nil
@@ -3489,7 +3634,7 @@ local function CreateCategoriesPanel(mainPanel)
         check:SetSize(24, 24)
         check:SetPoint("LEFT")
         check:SetScript("OnClick", function(self)
-            if not EmotePanelSavedVars.categoryWheel then return end
+            if not IsCategoryWheelEnabled() then return end
             local hidden = EmotePanelSavedVars.hiddenEntries
             hidden.categories = hidden.categories or {}
             hidden.categories[id] = not self:GetChecked() or nil
@@ -3501,11 +3646,13 @@ local function CreateCategoriesPanel(mainPanel)
         local label = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         label:SetPoint("LEFT", check, "RIGHT", 4, 0)
         label:SetText(entry.name)
+        AddSettingsTooltip(check, entry.name, "Choose whether this category appears on the Category Wheel.")
+        AddSettingsTooltip(row, entry.name, "Select this category to move it up or down.")
         rows[id] = row
     end
 
     function panel:refresh()
-        local enabled = EmotePanelSavedVars.categoryWheel == true
+        local enabled = IsCategoryWheelEnabled()
         toggle:SetChecked(enabled)
         reset:SetEnabled(enabled and EmotePanelSavedVars.entryOrder.categories ~= nil)
         local order = GetOrderedEntryIDs("categories")
@@ -3551,67 +3698,73 @@ local function CreatePositionControls(panel, anchor)
     local description = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     description:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -5)
     description:SetJustifyH("LEFT")
-    description:SetText("Offsets from screen center. Dragging the wheel also saves its position.")
+    description:SetText("50% is centered. Higher values move the wheel right or up.")
 
     local controls = CreateFrame("Frame", nil, panel)
-    controls:SetSize(420, 44)
+    controls:SetSize(420, 82)
     controls:SetPoint("TOPLEFT", description, "BOTTOMLEFT", 0, -8)
-    local function CreateOffsetBox(axis, labelText, x)
+    local function CreateSlider(axis, labelText, y)
+        local slider = CreateFrame("Frame", AddonName .. "Position" .. axis, controls, "MinimalSliderWithSteppersTemplate")
+        slider:SetSize(250, 20)
+        slider:SetPoint("TOPLEFT", 108, y)
+        slider:Init(50, 0, 100, 100)
         local label = controls:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-        label:SetPoint("TOPLEFT", x, 0)
+        label:SetPoint("RIGHT", slider, "LEFT", -10, 0)
         label:SetText(labelText)
-        local box = CreateFrame("EditBox", AddonName .. "Position" .. axis, controls, "InputBoxScriptTemplate")
-        SkinPanel(box)
-        box:SetSize(90, 24)
-        box:SetPoint("BOTTOMLEFT", controls, "BOTTOMLEFT", x + 5, 0)
-        box:SetFontObject(GameFontHighlight)
-        box:SetTextColor(1, 1, 1, 1)
-        box:SetJustifyH("CENTER")
-        box:SetTextInsets(6, 6, 0, 0)
-        box:SetAutoFocus(false)
-        box:SetMaxLetters(12)
-        return box
+        local direction = axis == "X" and "right" or "up"
+        local tooltip = "Move the wheel " .. direction .. " by increasing the percentage. 50% centers this axis."
+        AddSettingsTooltip(slider, labelText, tooltip, label)
+        AddSettingsTooltip(slider.Slider, labelText, tooltip)
+        AddSettingsTooltip(slider.Back, labelText, "Decrease this axis by one percentage point.")
+        AddSettingsTooltip(slider.Forward, labelText, "Increase this axis by one percentage point.")
+        slider.percentText = controls:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        slider.percentText:SetPoint("LEFT", slider, "RIGHT", 12, 0)
+        return slider
     end
-    local xBox = CreateOffsetBox("X", "Horizontal (X)", 0)
-    local yBox = CreateOffsetBox("Y", "Vertical (Y)", 112)
-    local status = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    status:SetPoint("TOPLEFT", controls, "BOTTOMLEFT", 0, -6)
-    status:SetJustifyH("LEFT")
+    local xSlider = CreateSlider("X", "Horizontal (X)", -2)
+    local ySlider = CreateSlider("Y", "Vertical (Y)", -28)
 
+    local refreshing
+    local function SetPercent(slider, percent)
+        slider.percentText:SetText(("%d%%"):format(percent))
+    end
+    local function RefreshSlider(slider, offset, limit)
+        local percent = limit > 0 and math.max(0, math.min(100, RoundOffset(50 + 50 * offset / limit))) or 50
+        slider:SetEnabled(limit > 0)
+        slider:SetValue(percent)
+        SetPercent(slider, percent)
+    end
     function panel:refreshPosition()
         local x, y = EmotePanel:GetPositionOffsets()
-        xBox:SetText(("%.1f"):format(x))
-        yBox:SetText(("%.1f"):format(y))
-        status:SetText("Positive X moves right. Positive Y moves up.")
+        local maxX, maxY = GetPositionLimits(EmotePanel.frame)
+        refreshing = true
+        RefreshSlider(xSlider, x, maxX)
+        RefreshSlider(ySlider, y, maxY)
+        refreshing = nil
     end
 
-    local function Apply()
-        local x, y = tonumber(xBox:GetText()), tonumber(yBox:GetText())
-        if not (x and y and math.abs(x) < math.huge and math.abs(y) < math.huge) then
-            status:SetText("Enter a number for both X and Y.")
-            return
+    local function OnValueChanged(slider, value)
+        if refreshing then return end
+        local x, y = EmotePanel:GetPositionOffsets()
+        local maxX, maxY = GetPositionLimits(EmotePanel.frame)
+        local percent = RoundOffset(value)
+        local fraction = (percent - 50) / 50
+        if slider == xSlider then
+            x = RoundOffset(fraction * maxX)
+        else
+            y = RoundOffset(fraction * maxY)
         end
         EmotePanel:SetPositionOffsets(x, y)
-        xBox:ClearFocus()
-        yBox:ClearFocus()
-        panel:refreshPosition()
+        SetPercent(slider, percent)
     end
-
-    for _, box in ipairs({xBox, yBox}) do
-        box:SetScript("OnEnterPressed", Apply)
-        box:SetScript("OnEscapePressed", function(self)
-            self:ClearFocus()
-            panel:refreshPosition()
-        end)
-    end
-    local apply = CreateTextButton(controls, "Apply")
-    apply:SetSize(64, 24)
-    apply:SetPoint("BOTTOMLEFT", 224, 0)
-    apply:SetScript("OnClick", Apply)
+    local valueChanged = MinimalSliderWithSteppersMixin.Event.OnValueChanged
+    xSlider:RegisterCallback(valueChanged, OnValueChanged, xSlider)
+    ySlider:RegisterCallback(valueChanged, OnValueChanged, ySlider)
 
     local reset = CreateTextButton(controls, "Reset Position")
     reset:SetSize(116, 24)
-    reset:SetPoint("LEFT", apply, "RIGHT", 8, 0)
+    reset:SetPoint("BOTTOMLEFT", 0, 0)
+    AddSettingsTooltip(reset, "Reset Position", "Return both position sliders to 50% and center the wheel.")
     reset:SetScript("OnClick", function()
         StaticPopup_Show("EMOTEPANEL_RESET_SETTINGS", "Return the wheel to the center of the screen?", nil, function()
             EmotePanelSavedVars.positions.emotePanel = nil
@@ -3619,7 +3772,7 @@ local function CreatePositionControls(panel, anchor)
             panel:refreshPosition()
         end)
     end)
-    return status
+    return controls
 end
 
 local function CreateCustomizationPanel(mainPanel)
@@ -3635,6 +3788,7 @@ local function CreateCustomizationPanel(mainPanel)
     local glyphDropdown = CreateFrame("DropdownButton", AddonName .. "GlyphStyle", panel, "WowStyle1DropdownTemplate")
     glyphDropdown:SetWidth(150)
     glyphDropdown:SetPoint("LEFT", glyphLabel, "RIGHT", 8, 0)
+    AddSettingsTooltip(glyphDropdown, "Controller glyphs", "Choose which controller icons appear in prompts. Automatic follows WoW's active icon set.", glyphLabel)
     glyphDropdown:SetupMenu(function(_, root)
         local function IsSelected(value) return GetGlyphStyle() == value end
         local function Select(value)
@@ -3654,17 +3808,18 @@ local function CreateCustomizationPanel(mainPanel)
     local checks = {}
     local anchor = display
     for _, option in ipairs({
-        {"showHelpButton", "Show Help button (?)"},
-        {"showCloseButton", "Show Close button (X)"},
-        {"showKeybindLegend", "Show keybind legend"},
+        {"showHelpButton", "Show Help button (?)", "Show the wheel button that opens EmotePanel settings."},
+        {"showCloseButton", "Show Close button (X)", "Show the wheel button that dismisses the wheel."},
+        {"showKeybindLegend", "Show keybind legend", "Show the controller shortcuts below the wheel."},
     }) do
-        local key, text = unpack(option)
+        local key, text, tooltip = unpack(option)
         local check = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
         check:SetSize(24, 24)
         check:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -4)
         local label = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
         label:SetPoint("LEFT", check, "RIGHT", 4, 0)
         label:SetText(text)
+        AddSettingsTooltip(check, text, tooltip, label)
         check:SetScript("OnClick", function(self)
             EmotePanelSavedVars[key] = not not self:GetChecked()
             EmotePanel:RefreshWheelDisplay()
@@ -3680,14 +3835,102 @@ local function CreateCustomizationPanel(mainPanel)
     local reset = CreateTextButton(panel, "Reset All Entry Overrides")
     reset:SetSize(190, 24)
     reset:SetPoint("TOPLEFT", overrides, "BOTTOMLEFT", 0, -6)
+    AddSettingsTooltip(reset, "Reset All Entry Overrides", "Restore default icons, names, and text for built-in entries.")
     reset:SetScript("OnClick", function() StaticPopup_Show("EMOTEPANEL_RESET_ALL") end)
     local function Refresh(self)
         for key, check in pairs(checks) do check:SetChecked(EmotePanelSavedVars[key] ~= false) end
         self:refreshPosition()
     end
+    panel.OnRefresh = Refresh
     panel:SetScript("OnShow", Refresh)
     Refresh(panel)
     return panel
+end
+
+local function CreateWheelBindingControls(panel, header)
+    local label = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    label:SetPoint("TOPLEFT", header, "BOTTOMLEFT", 0, -14)
+    label:SetText("Wheel Keybind")
+
+    local capture = CreateFrame("Frame", nil, panel)
+    capture:Hide()
+    capture:SetAllPoints(panel)
+    capture:SetFrameStrata("TOOLTIP")
+    local slot, input, chord
+    local buttons = {}
+    local controllerTip = "Enable ConsolePort and turn off Gamepad (Beta)."
+    local status = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    status:SetText(controllerTip)
+
+    function panel:RefreshWheelBindings()
+        for index, button in ipairs(buttons) do
+            local key = EmotePanel:GetWheelBinding(index)
+            button:SetText(slot == index and "Press a key..." or key and (GetBindingText(key) or key) or "Not bound")
+        end
+    end
+
+    for index, title in ipairs({"Primary wheel keybind", "Secondary wheel keybind"}) do
+        local button = CreateTextButton(panel, "Not bound")
+        button:SetSize(114, 24)
+        button:SetPoint("LEFT", buttons[index - 1] or label, "RIGHT", 8, 0)
+        button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+        button:SetScript("OnClick", function(_, mouseButton)
+            local sameSlot = slot == index
+            capture:Hide()
+            if InCombatLockdown() then
+                status:SetText("Set the wheel keybind outside combat.")
+            elseif mouseButton == "RightButton" then
+                local success, message = EmotePanel:SetWheelBinding(index, nil)
+                status:SetText(success and controllerTip or message)
+                panel:RefreshWheelBindings()
+            elseif not sameSlot then
+                slot = index
+                capture:EnableKeyboard(true)
+                capture:EnableGamePadButton(true)
+                capture:SetPropagateKeyboardInput(false)
+                capture:Show()
+                status:SetText("Press a keyboard key or controller button. Esc cancels.")
+                panel:RefreshWheelBindings()
+            end
+        end)
+        AddSettingsTooltip(button, title, "Click and press a keyboard key or controller button to assign it. Right-click clears this binding. The wheel keybind works in and out of combat.", index == 1 and label or nil)
+        buttons[index] = button
+    end
+    status:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -12)
+    status:SetWidth(370)
+    status:SetJustifyH("LEFT")
+    panel.wheelBindingButtons = buttons
+
+    local function OnInputDown(_, key)
+        if not slot then return end
+        if key == "ESCAPE" then
+            capture:Hide()
+        elseif not input and not IsKeyPressIgnoredForBinding(key) then
+            input = key
+            chord = CreateKeyChordStringUsingMetaKeyState(key)
+        end
+    end
+    local function OnInputUp(_, key)
+        if not slot or input ~= key then return end
+        local selectedSlot, binding = slot, chord
+        capture:Hide()
+        local success, message = EmotePanel:SetWheelBinding(selectedSlot, binding)
+        status:SetText(success and controllerTip or message)
+        panel:RefreshWheelBindings()
+    end
+    capture:SetScript("OnKeyDown", OnInputDown)
+    capture:SetScript("OnKeyUp", OnInputUp)
+    capture:SetScript("OnGamePadButtonDown", OnInputDown)
+    capture:SetScript("OnGamePadButtonUp", OnInputUp)
+    capture:SetScript("OnHide", function()
+        slot, input, chord = nil, nil, nil
+        status:SetText(controllerTip)
+        panel:RefreshWheelBindings()
+    end)
+    function panel:CancelWheelBindingCapture() capture:Hide() end
+    panel:HookScript("OnHide", panel.CancelWheelBindingCapture)
+    panel:RefreshWheelBindings()
+    return status
 end
 
 local function CreateInterfaceOptions()
@@ -3705,20 +3948,11 @@ local function CreateInterfaceOptions()
 
     local setup = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     setup:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -16)
-    setup:SetText("Controller setup")
-    local controllerHelp = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    controllerHelp:SetPoint("TOPLEFT", setup, "BOTTOMLEFT", 0, -6)
-    controllerHelp:SetText("Enable ConsolePort and turn off Gamepad (Beta).")
-    local keybind = CreateTextButton(mainPanel, "Wheel Keybind")
-    keybind:SetSize(115, 24)
-    keybind:SetPoint("TOPLEFT", controllerHelp, "BOTTOMLEFT", 0, -8)
-    keybind:SetScript("OnClick", function()
-        if InCombatLockdown() or not Settings.KEYBINDINGS_CATEGORY_ID then return end
-        Settings.OpenToCategory(Settings.KEYBINDINGS_CATEGORY_ID, BINDING_HEADER_EMOTEPANEL)
-    end)
+    setup:SetText("Controller Setup")
+    local controllerHelp = CreateWheelBindingControls(mainPanel, setup)
 
     local behavior = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-    behavior:SetPoint("TOPLEFT", keybind, "BOTTOMLEFT", 0, -16)
+    behavior:SetPoint("TOPLEFT", controllerHelp, "BOTTOMLEFT", 0, -16)
     behavior:SetText("Wheel behavior")
 
     local closeCheck = CreateFrame("CheckButton", nil, mainPanel, "UICheckButtonTemplate")
@@ -3731,6 +3965,7 @@ local function CreateInterfaceOptions()
     local closeLabel = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     closeLabel:SetPoint("LEFT", closeCheck, "RIGHT", 4, 0)
     closeLabel:SetText("Close panel after action")
+    AddSettingsTooltip(closeCheck, "Close panel after action", "Close the wheel after most actions. Ordinary shortcuts such as emotes keep the combat wheel open.", closeLabel)
 
     local closeHelp = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     closeHelp:SetPoint("TOPLEFT", closeCheck, "BOTTOMLEFT", 0, -4)
@@ -3747,17 +3982,19 @@ local function CreateInterfaceOptions()
     local rememberLabel = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     rememberLabel:SetPoint("LEFT", rememberCheck, "RIGHT", 4, 0)
     rememberLabel:SetText("Remember last Action")
+    AddSettingsTooltip(rememberCheck, "Remember last Action", "Reopen at the last action you used. The remembered action clears on logout or UI reload.", rememberLabel)
 
     local cooldownCheck = CreateFrame("CheckButton", nil, mainPanel, "UICheckButtonTemplate")
     cooldownCheck:SetSize(24, 24)
     cooldownCheck:SetPoint("TOPLEFT", rememberCheck, "BOTTOMLEFT", 0, -4)
     cooldownCheck:SetScript("OnClick", function(self)
-        EmotePanelSavedVars.macroCooldowns = self:GetChecked() and true or nil
+        EmotePanelSavedVars.macroCooldowns = not not self:GetChecked()
         EmotePanel:RefreshActionCooldowns()
     end)
     local cooldownLabel = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     cooldownLabel:SetPoint("LEFT", cooldownCheck, "RIGHT", 4, 0)
     cooldownLabel:SetText("Show action cooldowns")
+    AddSettingsTooltip(cooldownCheck, "Show action cooldowns", "Show countdown numbers on cooling-down Actions and Favorites. Their icons dim even when numbers are off.", cooldownLabel)
 
     local customizationPanel = CreateCustomizationPanel(mainPanel)
     EmotePanel.customizationPanel = customizationPanel
@@ -3769,7 +4006,7 @@ local function CreateInterfaceOptions()
     pagesTitle:SetPoint("TOPLEFT", cooldownCheck, "BOTTOMLEFT", 0, -12)
     pagesTitle:SetText("More settings")
     local pageLinks = {
-        {"categories", "Categories", "Enable Category Wheel and arrange its segments.\nWith it off, the wheel opens on Favorites."},
+        {"categories", "Categories", "Enable Category Wheel and arrange its segments.\nTurn it off to open on Favorites."},
         {"customization", "Customization", "Learn how to edit icons and text or reset overrides."},
         {"help", "Entries", "Show, hide, reorder, and edit actions.\nManage spells, items, and saved macros."},
     }
@@ -3787,6 +4024,7 @@ local function CreateInterfaceOptions()
         help:SetPoint("LEFT", button, "RIGHT", 12, 0)
         help:SetJustifyH("LEFT")
         help:SetText(page[3])
+        AddSettingsTooltip(button, page[2], page[3], help)
         previous = button
     end
 
@@ -3797,6 +4035,7 @@ local function CreateInterfaceOptions()
     local resetGeneral = CreateTextButton(mainPanel, "Reset General")
     resetGeneral:SetSize(120, 24)
     resetGeneral:SetPoint("TOPLEFT", resetTitle, "BOTTOMLEFT", 0, -7)
+    AddSettingsTooltip(resetGeneral, "Reset General", "Restore the defaults for closing after an action, remembering the last action, and showing cooldown numbers.")
     resetGeneral:SetScript("OnClick", function()
         StaticPopup_Show("EMOTEPANEL_RESET_SETTINGS", "Restore default wheel behavior?", nil, function()
             EmotePanelSavedVars.closePanelAfterAction = nil
@@ -3805,17 +4044,37 @@ local function CreateInterfaceOptions()
             EmotePanel.lastAction = nil
             closeCheck:SetChecked(true)
             rememberCheck:SetChecked(false)
-            cooldownCheck:SetChecked(false)
+            cooldownCheck:SetChecked(true)
             EmotePanel:RefreshActionCooldowns()
             EmotePanel:SyncCombatWheel(true)
         end)
     end)
 
+    local resetAddon = CreateTextButton(mainPanel, "Reset to Defaults")
+    resetAddon:SetSize(128, 24)
+    resetAddon:SetPoint("LEFT", resetGeneral, "RIGHT", 8, 0)
+    AddSettingsTooltip(resetAddon, "Reset to Defaults", "Restore all EmotePanel defaults for every character and reload the UI. WoW keybinds stay assigned.")
+    resetAddon:SetScript("OnClick", function()
+        StaticPopup_Show("EMOTEPANEL_RESET_SETTINGS",
+            "Reset EmotePanel for all characters?\n\nThis clears saved settings, custom entries, Favorites, and Action selections, then reloads the UI. WoW keybinds stay assigned.",
+            nil, function()
+                if InCombatLockdown() then
+                    print("|cFF00FF00EmotePanel:|r Reset the addon outside combat.")
+                    return
+                end
+                -- Keep the current settings available until the UI saves them on reload.
+                resetOnLogout = true
+                ReloadUI()
+            end)
+    end)
+
     local function Refresh()
+        mainPanel:RefreshWheelBindings()
         closeCheck:SetChecked(EmotePanelSavedVars.closePanelAfterAction ~= false)
         rememberCheck:SetChecked(EmotePanelSavedVars.rememberLastAction == true)
-        cooldownCheck:SetChecked(EmotePanelSavedVars.macroCooldowns == true)
+        cooldownCheck:SetChecked(EmotePanelSavedVars.macroCooldowns ~= false)
     end
+    mainPanel.OnRefresh = Refresh
     mainPanel:SetScript("OnShow", Refresh)
     Refresh()
 
@@ -3936,8 +4195,10 @@ local function ShowHelp()
     print("|cFF00FF00EmotePanel commands|r")
     print("  /ep or /emotepanel - Toggle the regular wheel")
     print("  /ep config - Open EmotePanel settings")
+    print("               Use Reset to Defaults to reset the whole addon")
     print("  /ep list - Reorder Favorites and manage wheel entries")
     print("  /ep actions - Choose spells, items, and saved macros for the Actions wheel")
+    print("                Uncheck a Not carried item to remove it from the Items list")
     print("  /ep categories - Set up and reorder the opening Category Wheel")
     print("  /ep reset - Ask to reset custom icons, names, and text")
     print("  /ep debug - Show combat debug status")
@@ -3945,9 +4206,11 @@ local function ShowHelp()
     print("  /ep scroll - Show paging controls (legacy command)")
     print("  /ep help - Show this command list")
     print("|cFF00FF00Wheel controls|r")
-    print("  In combat, use Open or Close Emote Panel in WoW's Keybindings for spells, items, and macros.")
+    print("  Assign Open or Close Emote Panel in /ep config under Controller Setup for spells, items, and macros in combat.")
+    print("  Category Wheel and action cooldown numbers are on by default.")
     print("  The wheel uses its own controller navigation and pauses the ConsolePort interface cursor.")
     print("  Enable Remember last Action in /ep config to reopen at the last action until logout or /reload.")
+    print("  In /ep config under Customization, drag the position sliders or click their arrows. 50% is centered.")
     print(("  %s / %s or %s Select."):format(
         Glyph("PADLSTICKAXIS", "Left stick"), Glyph("PADRSTICKAXIS", "Right stick"), Glyph("DIRPADVERTICAL", "D-pad up/down")))
     print(("  %s Open or use. %s Back or close."):format(Glyph("PAD1", "A"), Glyph("PAD2", "B")))
@@ -3955,6 +4218,7 @@ local function ShowHelp()
         Glyph("PAD4", "Y"), Glyph("PAD3", "X")))
     print(("  In Customize Entry, %s toggles visibility, %s moves the entry, %s resets, and %s goes back."):format(
         Glyph("PAD3", "X"), Glyph("DIRPADVERTICAL", "D-pad up/down"), Glyph("PADLSHOULDER", "LB"), Glyph("PAD2", "B")))
+    print("  Customize Entry asks before discarding unsaved changes.")
     print("  Say Chat and Party Chat each have 16 defaults, including messages for campfires.")
     ShowPagingHelp()
 end
@@ -4021,13 +4285,13 @@ SLASH_EMOTEPANEL2 = "/ep"
 SlashCmdList["EMOTEPANEL"] = HandleSlashCommand
 
 -- Event handling
-local function RefreshActionPicker(kind)
-    local picker = _G[AddonName .. "ActionsPanel"]
-    if picker and picker:IsVisible() and picker.kind == kind then picker:refresh() end
-end
-
 local function OnEvent(self, event, ...)
-    if event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
+    if event == "PLAYER_LOGOUT" then
+        if resetOnLogout then
+            EmotePanelSavedVars = nil
+            resetOnLogout = nil
+        end
+    elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         if EmotePanel.combatDebug then
             local addon, action = ...
             if not issecretvalue(addon) and addon == AddonName then EmotePanel:CombatDebug("WoW restriction", event, action) end
@@ -4039,6 +4303,7 @@ local function OnEvent(self, event, ...)
             EmotePanel:LoadPosition()
             RestoreConsolePortCursor()
         else
+            EmotePanel.optionsPanel:CancelWheelBindingCapture()
             if EmotePanel.combatBindingReady and not EmotePanel.combatView then
                 EmotePanel.frame:StopMovingOrSizing()
                 EmotePanel.frame:Hide()
@@ -4057,6 +4322,7 @@ local function OnEvent(self, event, ...)
         if panel:IsVisible() then panel:refreshPosition() end
     elseif event == "UPDATE_BINDINGS" or event == "GAME_PAD_ACTIVE_CHANGED" then
         EmotePanel:SyncCombatWheel(true)
+        if EmotePanel.optionsPanel then EmotePanel.optionsPanel:RefreshWheelBindings() end
     elseif event == "BAG_UPDATE_DELAYED" or event == "PLAYER_EQUIPMENT_CHANGED" then
         if RefreshCarriedActionItems() then
             EmotePanel:RefreshCurrentEntryPages()
@@ -4135,6 +4401,7 @@ local function OnEvent(self, event, ...)
         EmotePanel:Initialize()
         EmotePanel.optionsPanel = CreateInterfaceOptions()
         CreateMinimapButton()
+        self:RegisterEvent("PLAYER_LOGOUT")
         local _, cursorLoaded = C_AddOns.IsAddOnLoaded("ConsolePort_Cursor")
         if cursorLoaded then self:UnregisterEvent("ADDON_LOADED") end
         self:RegisterEvent("SKILL_LINES_CHANGED")
