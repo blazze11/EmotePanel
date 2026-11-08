@@ -248,34 +248,47 @@ local PANEL_MODES = {
             { name = "Sit",      action = "sit",       actionType = "emote", icon = "INV_FISHINGCHAIR" },
         }
     },
+    -- Saved chat overrides and favorites refer to the slots in these two lists. Append new messages.
     chat = {
         title = "Say Chat",
         list = {
-            { name = "Hello!",      action = "Hey!",                                   actionType = "say", icon = "Spell_Misc_EmotionHappy" },
-            { name = "Well played", action = "Well played!",                           actionType = "say", icon = "Achievement_General_StayClassy" },
-            { name = "Thanks",      action = "Thanks for the help!",                   actionType = "say", icon = "INV_Misc_GiftWrap_01" },
-            { name = "No problem",  action = "No problem!",                            actionType = "say", icon = "Spell_Holy_BlessingOfProtection" },
-            { name = "BRB",         action = "Be right back.",                         actionType = "say", icon = "INV_Misc_PocketWatch_01" },
-            { name = "Bye",         action = "See you around!",                        actionType = "say", icon = "INV_Garrison_Hearthstone" },
-            { name = "LFG nearby",  action = "Anyone nearby want to group up?",        actionType = "say", icon = "atlas:gamepad-radial-icon-groupfinder" },
-            { name = "Quest",       action = "Anyone on this quest want to team up?",   actionType = "say", icon = "atlas:gamepad-radial-icon-quests" },
-            { name = "Gratz",       action = "Congratulations!",                       actionType = "say", icon = "INV_Misc_CelebrationCake_01" },
-            { name = "Trade",       action = "Would you like to trade?",               actionType = "say", icon = "INV_Misc_Coin_01" },
+            { name = "Hello!",              action = "hey o/",                   actionType = "say", icon = "Spell_Misc_EmotionHappy" },
+            { name = "Well played",         action = "nice one!",                actionType = "say", icon = "Achievement_General_StayClassy" },
+            { name = "Thanks",              action = "ty, appreciate it",        actionType = "say", icon = "INV_Misc_GiftWrap_01" },
+            { name = "No problem",          action = "np :)",                    actionType = "say", icon = "Spell_Holy_BlessingOfProtection" },
+            { name = "BRB",                 action = "brb, one sec",             actionType = "say", icon = "INV_Misc_PocketWatch_01" },
+            { name = "Bye",                 action = "cya!",                     actionType = "say", icon = "INV_Garrison_Hearthstone" },
+            { name = "LFG nearby",          action = "anyone wanna group up?",   actionType = "say", icon = "atlas:gamepad-radial-icon-groupfinder" },
+            { name = "Quest",               action = "you on this quest too?",   actionType = "say", icon = "atlas:gamepad-radial-icon-quests" },
+            { name = "Gratz",               action = "grats!",                   actionType = "say", icon = "INV_Misc_CelebrationCake_01" },
+            { name = "Trade",               action = "wanna trade?",             actionType = "say", icon = "INV_Misc_Coin_01" },
+            { name = "Mind if I sit?",      action = "mind if i sit here?",      actionType = "say", icon = "INV_FISHINGCHAIR" },
+            { name = "Join the Fire",       action = "come hang by the fire :)", actionType = "say", icon = "INV_Camelot_Camping_WelcomingCampfire" },
+            { name = "Thanks for the Fire", action = "ty for the fire!",         actionType = "say", icon = "INV_Drink_08" },
+            { name = "How's Leveling?",     action = "how's leveling going?",    actionType = "say", icon = "inv_misc_map02" },
+            { name = "Offer Help",          action = "need a hand with that?",   actionType = "say", icon = "Spell_Holy_Heal" },
+            { name = "Offer Food",          action = "anyone need food?",        actionType = "say", icon = "INV_Misc_Food_57" },
         }
     },
     party = {
         title = "Party Chat",
         list = {
-            { name = "Follow Me",    action = "Follow me this way.",                   actionType = "party", icon = "Ability_Hunter_Pathfinding" },
-            { name = "Need Break",   action = "Can we take a quick break?",             actionType = "party", icon = "INV_Drink_05" },
-            { name = "Thanks Group", action = "Thanks for the run!",                   actionType = "party", icon = "INV_Misc_GiftWrap_02" },
-            { name = "Good Job",     action = "Nice work, everyone!",                  actionType = "party", icon = "Achievement_Level_10" },
-            { name = "Ready?",       action = "Everyone ready for the next pull?",     actionType = "party", icon = "Interface\\RaidFrame\\ReadyCheck-Ready" },
-            { name = "OOM",          action = "Out of mana. Please wait while I drink.", actionType = "party", icon = "INV_Potion_76" },
-            { name = "Wait",         action = "Hold the pull. Let's regroup first.",   actionType = "party", icon = "INV_Misc_PocketWatch_02" },
-            { name = "Pulling",      action = "Pulling now. Stay with me.",             actionType = "party", icon = "Ability_Hunter_SniperShot" },
-            { name = "CC",           action = "Please use crowd control on my target.", actionType = "party", icon = "Spell_Nature_Polymorph" },
-            { name = "Help",         action = "I need help with these mobs!",          actionType = "party", icon = "Spell_Holy_Resurrection" },
+            { name = "Follow Me",      action = "this way",                     actionType = "party", icon = "Ability_Hunter_Pathfinding" },
+            { name = "Need Break",     action = "quick bio break?",             actionType = "party", icon = "INV_Drink_05" },
+            { name = "Thanks Group",   action = "gg, ty for the run!",          actionType = "party", icon = "INV_Misc_GiftWrap_02" },
+            { name = "Good Job",       action = "nice one, team",               actionType = "party", icon = "Achievement_Level_10" },
+            { name = "Ready?",         action = "rdy for next?",                actionType = "party", icon = "Interface\\RaidFrame\\ReadyCheck-Ready" },
+            { name = "OOM",            action = "oom, drinking",                actionType = "party", icon = "INV_Potion_76" },
+            { name = "Wait",           action = "hold up, wait for everyone",   actionType = "party", icon = "INV_Misc_PocketWatch_02" },
+            { name = "Pulling",        action = "pulling now",                  actionType = "party", icon = "Ability_Hunter_SniperShot" },
+            { name = "CC",             action = "can someone cc my target?",    actionType = "party", icon = "Spell_Nature_Polymorph" },
+            { name = "Help",           action = "need a hand here",             actionType = "party", icon = "Spell_Holy_Resurrection" },
+            { name = "Ready",          action = "ready when you are",           actionType = "party", icon = "Ability_Warrior_Vigilance" },
+            { name = "My Bad",         action = "my bad",                       actionType = "party", icon = "Spell_Misc_EmotionSad" },
+            { name = "Adds",           action = "got adds",                     actionType = "party", icon = "Ability_Warrior_BattleShout" },
+            { name = "Interrupt",      action = "kick next cast pls",           actionType = "party", icon = "Ability_Kick" },
+            { name = "Need a Rez",     action = "can i get a rez?",             actionType = "party", icon = "Spell_Holy_Redemption" },
+            { name = "Campfire Break", action = "wanna stop at that campfire?", actionType = "party", icon = "INV_Camelot_Camping_CampfireNearby" },
         }
     },
     commands = {
@@ -3942,6 +3955,7 @@ local function ShowHelp()
         Glyph("PAD4", "Y"), Glyph("PAD3", "X")))
     print(("  In Customize Entry, %s toggles visibility, %s moves the entry, %s resets, and %s goes back."):format(
         Glyph("PAD3", "X"), Glyph("DIRPADVERTICAL", "D-pad up/down"), Glyph("PADLSHOULDER", "LB"), Glyph("PAD2", "B")))
+    print("  Say Chat and Party Chat each have 16 defaults, including messages for campfires.")
     ShowPagingHelp()
 end
 

@@ -894,10 +894,7 @@ lua.execute("""
 
     tap("PADDRIGHT")
     assert(panel.titleText:GetText() == "Say Chat  2 / 2")
-    assert(panel.selectionName:GetText() == "Ninth" and not panel.slots[3]:IsShown())
-    setCursor(2 * step, 136)
-    mouse("LeftButton")
-    assert(#actions == 3)
+    assert(panel.selectionName:GetText() == "Ninth" and panel.slots[8]:IsShown())
     tap("PAD1")
     assert(actions[4][1] == "Saved ninth" and actions[4][2] == "SAY")
     tap("PAD4")
@@ -1574,16 +1571,16 @@ lua.execute("""
     faction = "Alliance"
     panel:ActivateSector(8, "LeftButton")
     assert(panel.selectionName:GetText() == "Rally Cheer" and actions[#actions][1] == "CHEER")
-    GoToPage("Say Chat  2 / 2")
-    panel:ActivateSector(3, "LeftButton")
+    GoToPage("Say Chat  3 / 3")
+    panel:ActivateSector(1, "LeftButton")
     assert(actions[#actions][1] == "Is there a campfire nearby?" and actions[#actions][2] == "SAY")
-    GoToPage("Party Chat  2 / 2")
+    GoToPage("Party Chat  3 / 3")
     local previousActions = #actions
     inGroup = false
-    panel:ActivateSector(3, "LeftButton")
+    panel:ActivateSector(1, "LeftButton")
     assert(#actions == previousActions)
     inGroup = true
-    panel:ActivateSector(3, "LeftButton")
+    panel:ActivateSector(1, "LeftButton")
     assert(actions[#actions][1] == "Could I get a summon?" and actions[#actions][2] == "PARTY")
     GoToPage("Commands  3 / 3")
     panel:Select(1)
@@ -1658,8 +1655,8 @@ lua.execute("""
     assert(not panel.backButton:IsShown() and not panel.pageArrows[1]:IsShown())
     local categories = {
         {"Favorites", "Favorites  1 / 2"}, {"Emotes", "Emotes  1 / 4"},
-        {"Voiced Emotes", "Voiced Emotes  1 / 3"}, {"Say Chat", "Say Chat  1 / 2"},
-        {"Party Chat", "Party Chat  1 / 2"}, {"Commands", "Commands  1 / 3"},
+        {"Voiced Emotes", "Voiced Emotes  1 / 3"}, {"Say Chat", "Say Chat  1 / 3"},
+        {"Party Chat", "Party Chat  1 / 3"}, {"Commands", "Commands  1 / 3"},
         {"Game Panels", "Game Panels  1 / 2"}, {"Professions", "Professions"},
     }
     for sector, category in ipairs(categories) do
@@ -1681,9 +1678,9 @@ lua.execute("""
     panel:Select(5)
     tap("PAD1")
     tap("PADLSHOULDER")
-    assert(panel.titleText:GetText() == "Party Chat  2 / 2")
+    assert(panel.titleText:GetText() == "Party Chat  3 / 3")
     tap("PADRSHOULDER")
-    assert(panel.titleText:GetText() == "Party Chat  1 / 2")
+    assert(panel.titleText:GetText() == "Party Chat  1 / 3")
     inGroup = true
     tap("PAD1")
     assert(#actions == priorActions + 1 and actions[#actions][2] == "PARTY" and frame:IsShown())
@@ -1745,7 +1742,7 @@ lua.execute("""
     assert(panel.titleText:GetText() == "Categories")
 
     local hiddenChat = {[-1] = true}
-    for index = 1, 11 do hiddenChat[index] = true end
+    for index = 1, 16 do hiddenChat[index] = true end
     local oldHiddenChat = EmotePanelSavedVars.hiddenEntries.chat
     EmotePanelSavedVars.hiddenEntries.chat = hiddenChat
     panel:RefreshEntryPages()
@@ -3141,6 +3138,9 @@ lua.execute("""
     for _, page in pairs(EmotePanel.combatPages) do
         local category = page.title:match("^(.-)  %d+ / %d+$") or page.title
         if iconCategories[category] then
+            if category == "Say Chat" or category == "Party Chat" then
+                assert(page.title:match("  [12] / 2$") and page.count == 8, page.title)
+            end
             local seen = iconsByCategory[category] or {}
             iconsByCategory[category] = seen
             for _, entry in ipairs(page.snapshot) do
@@ -3153,6 +3153,11 @@ lua.execute("""
         end
     end
     for category in pairs(iconCategories) do assert(iconsByCategory[category], category) end
+    for _, category in ipairs({"Say Chat", "Party Chat"}) do
+        local count = 0
+        for _ in pairs(iconsByCategory[category]) do count = count + 1 end
+        assert(count == 16, category)
+    end
     assert(emoteIcons.CHICKEN == "INV_Misc_Food_15" and emoteIcons.EAT == "INV_Misc_Food_57")
 """)
 print("PASS: unique default icons, session-only last action, secure combat dispatch, controller warnings and glyphs, minimap and compartment launchers, settings and resets, categories, action picker and item availability, spells, items, macros and cooldowns, group commands, entry and Favorites order, navigation, visibility, and command submission")

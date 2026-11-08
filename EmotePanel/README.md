@@ -209,8 +209,10 @@ or the WoW professions overview otherwise. Profession icons can be edited with
 Y/Triangle or right-click. Favorited professions stay saved account-wide
 and only appear on characters that have learned them.
 
-Stock Say messages are short and use local chat. Party messages cover
-group coordination such as waiting for mana, regrouping, and pulling.
+Say Chat and Party Chat each start with 16 messages across two pages.
+Say uses local chat for greetings, questing, and campfire conversation.
+Party covers quick group coordination such as waiting for mana, calling
+out adds or interrupts, and suggesting a campfire break.
 Party messages require a group. **Ready?** sends a party message, and
 the **Ready Check** command starts WoW's ready check for a group leader
 or assistant.
