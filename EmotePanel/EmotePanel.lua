@@ -445,16 +445,18 @@ local function LoadNativeEmotes()
     for _, token in ipairs(TextEmoteSpeechList or {}) do voicedEmoteTokens[token] = true end
 
     local icons = {
-        BEG = "INV_Misc_Coin_01", CHICKEN = "INV_Misc_Food_57", EAT = "INV_Misc_Food_15",
-        SHY = "Spell_Misc_EmotionSad", SLEEP = "Spell_Nature_Sleep", LEAN = "Ability_Warrior_SecondWind",
+        BEG = "INV_Misc_Coin_01", CHICKEN = "INV_Misc_Food_15", EAT = "INV_Misc_Food_57",
+        SHY = "Spell_Misc_EmotionAfraid", SLEEP = "INV_MISC_NightelfBedroll",
+        LEAN = "Archaeology_5_0_WalkingCaneOfBrewfatherRenYun",
         HELPME = "Spell_Holy_Resurrection", INCOMING = "Ability_Hunter_MarkedForDeath",
         CHARGE = "Ability_Warrior_Charge", FLEE = "Ability_Rogue_Sprint",
-        ATTACKMYTARGET = "Ability_Warrior_BattleShout", OOM = "INV_Potion_76",
+        ATTACKMYTARGET = "Ability_Hunter_Assassinate", OOM = "INV_Potion_76",
         FOLLOW = "Ability_Hunter_Pathfinding", WAIT = "INV_Misc_PocketWatch_02",
         HEALME = "Spell_Holy_Heal", OPENFIRE = "Ability_Hunter_SniperShot",
         HELLO = "Spell_Holy_LayOnHands", WELCOME = "Spell_Misc_EmotionHappy",
         CONGRATULATE = "INV_Misc_CelebrationCake_01", FLIRT = "Spell_Shadow_SoothingKiss",
-        JOKE = "INV_Helm_LaughingSkull_01",
+        JOKE = "INV_Helm_LaughingSkull_01", RASP = "INV_Misc_Horn_01", TRAIN = "Ability_Foundryraid_TrainDeath",
+        FORTHEALLIANCE = "INV_BannerPVP_02", FORTHEHORDE = "INV_BannerPVP_01",
     }
     local names = {
         HELPME = "Help Me", ATTACKMYTARGET = "Attack My Target", OOM = "Out of Mana",

@@ -187,7 +187,8 @@ is in **Commands** and can be favorited.
 
 **Emotes** and **Voiced Emotes** follow the two Blizzard chat menus.
 The wheel includes the stock entries from both menus alongside the
-original extra emotes. **Add Emote** uses WoW's voice list to choose the
+original extra emotes. Built-in entries have distinct default icons within
+their category. **Add Emote** uses WoW's voice list to choose the
 category automatically. Faction Cheer uses the character's faction.
 
 Open **Game Panels** from the category wheel or page right past Favorites

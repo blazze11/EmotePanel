@@ -3132,5 +3132,27 @@ lua.execute("""
     assert(EmotePanelSavedVars.rememberLastAction and not EmotePanel.lastAction)
     assert(not EmotePanel.combatInput:GetAttribute("resume-page"))
     assert(#EmotePanelSavedVars.directActions[playerGUID] == 1)
+
+    local iconCategories = {
+        Categories = true, Emotes = true, ["Voiced Emotes"] = true, ["Say Chat"] = true,
+        ["Party Chat"] = true, Commands = true, ["Game Panels"] = true,
+    }
+    local iconsByCategory, emoteIcons = {}, {}
+    for _, page in pairs(EmotePanel.combatPages) do
+        local category = page.title:match("^(.-)  %d+ / %d+$") or page.title
+        if iconCategories[category] then
+            local seen = iconsByCategory[category] or {}
+            iconsByCategory[category] = seen
+            for _, entry in ipairs(page.snapshot) do
+                local mode, _, data = unpack(entry)
+                local icon = tostring(data.icon):lower()
+                assert(not seen[icon], category .. ": " .. data.name .. " shares an icon with " .. (seen[icon] or ""))
+                seen[icon] = data.name
+                if mode == "emotes" and data.token then emoteIcons[data.token] = data.icon end
+            end
+        end
+    end
+    for category in pairs(iconCategories) do assert(iconsByCategory[category], category) end
+    assert(emoteIcons.CHICKEN == "INV_Misc_Food_15" and emoteIcons.EAT == "INV_Misc_Food_57")
 """)
-print("PASS: session-only last action, secure combat dispatch, controller warnings and glyphs, minimap and compartment launchers, settings and resets, categories, action picker and item availability, spells, items, macros and cooldowns, group commands, entry and Favorites order, navigation, visibility, and command submission")
+print("PASS: unique default icons, session-only last action, secure combat dispatch, controller warnings and glyphs, minimap and compartment launchers, settings and resets, categories, action picker and item availability, spells, items, macros and cooldowns, group commands, entry and Favorites order, navigation, visibility, and command submission")
