@@ -1,2 +1,8 @@
-.release
-.vscode
+# Track addon source and public distribution files at the repository root.
+/*
+!/.gitignore
+!/.pkgmeta
+!/CHANGELOG.md
+!/EmotePanel/
+!/LICENSE
+!/README.md

@@ -36,16 +36,6 @@ The minimap button and **Addon Compartment** entry open the wheel with a left-cl
 
 See the [full guide](EmotePanel/README.md) for combat behavior, customization, and every slash command. See the [changelog](CHANGELOG.md) for release details.
 
-## Development
-
-The addon source is in `EmotePanel/`. Run the mock suite from the checkout root with Python and Lupa's Lua 5.1 runtime.
-
-```sh
-python3 tests/test_emote_panel.py
-```
-
-Set `LUA_TEST_DEPS` to the dependency directory if Lupa is installed outside your Python environment.
-
 ## AI assistance
 
 OpenAI Codex helped develop and document the Forever port. Automated checks use a simulated WoW UI. Live behavior also depends on the client and input setup.
