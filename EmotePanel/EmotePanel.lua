@@ -1473,10 +1473,18 @@ local function CreateCustomMessageDialog()
 end
 
 -- EmotePanel Methods
+local function SetConsolePortCursorObstructed(frame, obstructed)
+    local consolePort = _G.ConsolePort
+    if consolePort and consolePort.SetCursorObstructor then
+        consolePort:SetCursorObstructor(frame, obstructed)
+    end
+end
+
 function EmotePanel:CreateMainFrame()
     self.frame = CreateFrame("Frame", AddonName .. "Frame", UIParent)
     local frame = self.frame
 
+    frame:SetAttribute("nodeignore", true)
     frame:SetWidth(PANEL_WIDTH)
     frame:SetHeight(PANEL_HEIGHT)
     frame:SetPoint("CENTER")
@@ -2001,6 +2009,7 @@ function EmotePanel:CreateWheel()
         local button = CreateFrame("Button", AddonName .. "SecureWheelInput", UIParent,
             "SecureActionButtonTemplate,SecureHandlerStateTemplate,SecureHandlerShowHideTemplate")
         button:Hide()
+        button:SetAttribute("nodeignore", true)
         button:SetSize(WHEEL_SIZE, WHEEL_SIZE)
         button:SetFrameStrata("DIALOG")
         button:EnableMouse(true)
@@ -2835,6 +2844,8 @@ function EmotePanel:Initialize()
 
     -- Hide by default
     self.frame:Hide()
+    self.frame:HookScript("OnShow", function(frame) SetConsolePortCursorObstructed(frame, true) end)
+    self.frame:HookScript("OnHide", function(frame) SetConsolePortCursorObstructed(frame, false) end)
 
     -- Blizzard closes special windows separately from the protected Escape handlers.
     table.insert(UISpecialFrames, self.frame:GetName())
@@ -3838,6 +3849,7 @@ local function ShowHelp()
     print("  /ep help - Show this command list")
     print("|cFF00FF00Wheel controls|r")
     print("  In combat, use Open or Close Emote Panel in WoW's Keybindings for spells, items, and macros.")
+    print("  The wheel uses its own controller navigation when ConsolePort is enabled.")
     print("  Enable Remember last Action in /ep config to reopen at the last action until logout or /reload.")
     print(("  %s / %s or %s Select."):format(
         Glyph("PADLSTICKAXIS", "Left stick"), Glyph("PADRSTICKAXIS", "Right stick"), Glyph("DIRPADVERTICAL", "D-pad up/down")))
@@ -4014,11 +4026,15 @@ local function OnEvent(self, event, ...)
             RefreshProfessions()
             helpPanel:refresh()
         end
+    elseif event == "ADDON_LOADED" and select(1, ...) == "ConsolePort_Cursor" and EmotePanel.frame then
+        self:UnregisterEvent("ADDON_LOADED")
+        if EmotePanel.frame:IsVisible() then SetConsolePortCursorObstructed(EmotePanel.frame, true) end
     elseif event == "ADDON_LOADED" and select(1, ...) == AddonName then
         EmotePanel:Initialize()
         EmotePanel.optionsPanel = CreateInterfaceOptions()
         CreateMinimapButton()
-        self:UnregisterEvent("ADDON_LOADED")
+        local _, cursorLoaded = C_AddOns.IsAddOnLoaded("ConsolePort_Cursor")
+        if cursorLoaded then self:UnregisterEvent("ADDON_LOADED") end
         self:RegisterEvent("SKILL_LINES_CHANGED")
         self:RegisterEvent("SPELLS_CHANGED")
         self:RegisterEvent("UPDATE_MACROS")

@@ -53,6 +53,9 @@ Turn off **Enable Gamepad UI** under **Options → Gameplay → Gamepad**.
 At login or UI reload, EmotePanel prints a red chat warning if the wheel
 keybind is unassigned. Controller setup reminders appear in the same message
 when they apply.
+The wheel handles its own controller navigation. Its controls are excluded
+from ConsolePort's interface cursor, and opening the wheel suspends
+ConsolePort's automatic cursor while the wheel is visible.
 
 When a spell, item, or macro closes the combat wheel, the movement stick
 must return to center before it can move the character again. Outside

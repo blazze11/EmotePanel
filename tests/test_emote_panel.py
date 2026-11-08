@@ -174,6 +174,9 @@ lua.execute("""
         local frame = baseCreateFrame(kind, name, parent, template)
         if name then _G[name] = frame end
         frame.GetName = function() return name end
+        frame.attributes = {}
+        frame.SetAttribute = function(self, name, value) self.attributes[name] = value end
+        frame.GetAttribute = function(self, name) return self.attributes[name] end
         frame.GetPoint = function(self) return unpack(self.point or {}) end
         frame.GetSize = function(self) return self:GetWidth(), self:GetHeight() end
         frame.SetHitRectInsets = function(self, ...) self.hitInsets = {...} end
@@ -212,12 +215,10 @@ lua.execute("""
         end
         if template and template:find("SecureActionButtonTemplate", 1, true) then
             assert(not combat and parent == UIParent)
-            frame.attributes = {}
             frame.SetAttribute = function(self, name, value)
                 assert(not combat or restricted, "Insecure action attribute write during combat")
                 self.attributes[name] = value
             end
-            frame.GetAttribute = function(self, name) return self.attributes[name] end
             frame.RunAttribute = function(self, name, ...)
                 assert(restricted)
                 local args = {}
@@ -326,6 +327,7 @@ lua.execute("""
     }
     C_AddOns = {
         IsAddOnLoaded = function(name)
+            if name == "ConsolePort_Cursor" then return false, false end
             assert(name == "ConsolePort")
             return consolePortLoaded or consolePortLoading or false, consolePortLoaded == true
         end,
@@ -2972,6 +2974,7 @@ lua.execute("""
     local panel = EmotePanel
     local input = assert(panel.combatInput)
     local rememberCheck
+    assert(panel.frame:GetAttribute("nodeignore") and input:GetAttribute("nodeignore"))
     for _, widget in ipairs(widgets) do
         if widget:GetText() == "Remember last Action" and widget.point[2].parent == panel.optionsPanel then
             rememberCheck = widget.point[2]
@@ -2989,11 +2992,23 @@ lua.execute("""
 
     click("Toggle")
     expect("Categories", 1)
+    local cursorObstructed
+    ConsolePort = {
+        SetCursorObstructor = function(_, frame, active)
+            assert(frame == panel.frame)
+            cursorObstructed = active
+        end,
+    }
+    assert(events.events.ADDON_LOADED)
+    events.scripts.OnEvent(events, "ADDON_LOADED", "ConsolePort_Cursor")
+    assert(cursorObstructed and not events.events.ADDON_LOADED)
     TapWheelButton(panel, "PAD1")
     expect("Favorites", 1)
     TapWheelButton(panel, "PAD1")
+    assert(cursorObstructed == false)
     click("Toggle")
     expect("Categories", 1)
+    assert(cursorObstructed)
     click("Toggle")
     rememberCheck:SetChecked(true)
     rememberCheck:Click("LeftButton")
@@ -3001,6 +3016,7 @@ lua.execute("""
     expect("Categories", 1)
     panel:CycleMode(-1)
     expect("Actions  1 / 1", 1)
+    assert(panel.secureWheelInput:GetAttribute("nodeignore"))
     TapWheelButton(panel, "PAD1")
     assert(not panel.frame:IsShown())
     SlashCmdList.EMOTEPANEL("")
@@ -3013,10 +3029,12 @@ lua.execute("""
     events.scripts.OnEvent(events, "PLAYER_REGEN_DISABLED")
     click("Toggle")
     expect("Actions  1 / 1", 1)
+    assert(cursorObstructed)
     assert(input:GetAttribute("sector") == 1)
     local previousRuns = #combatRuns
     click("Accept")
     assert(not panel.frame:IsShown() and #combatRuns == previousRuns + 1)
+    assert(cursorObstructed == false)
     click("Toggle")
     click("Back")
     expect("Categories", nil)
@@ -3034,6 +3052,7 @@ lua.execute("""
     combat = false
     input:combatChanged("peace")
     events.scripts.OnEvent(events, "PLAYER_REGEN_ENABLED")
+    assert(cursorObstructed == false)
     click("Toggle")
     expect("Favorites", 2)
     TapWheelButton(panel, "PAD3")
@@ -3045,6 +3064,7 @@ lua.execute("""
     assert(panel.lastAction and input:GetAttribute("resume-page") == 1)
     assert(EmotePanelSavedVars.rememberLastAction and EmotePanelSavedVars.categoryWheel)
     assert(#EmotePanelSavedVars.directActions[playerGUID] == 1)
+    ConsolePort = nil
 """)
 load_addon()
 lua.execute("""

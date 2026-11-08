@@ -255,6 +255,7 @@ end
 local function CreateCombatInput(self)
     local button = CreateFrame("Button", INPUT_NAME, UIParent, "SecureActionButtonTemplate,SecureHandlerStateTemplate")
     button:Hide()
+    button:SetAttribute("nodeignore", true)
     button:SetFrameStrata("DIALOG")
     button:SetFrameLevel(self.frame:GetFrameLevel() + 10)
     button:SetClampedToScreen(true)
