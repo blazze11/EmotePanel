@@ -1007,7 +1007,7 @@ local function ExecuteAction(mode, index, data, fromMouse, sector)
 end
 
 StaticPopupDialogs["EMOTEPANEL_RESET_BUTTON"] = {
-    text = "Reset this entry to its default icon, name, and text?",
+    text = "Reset this entry to its default icon, name, and text?\n\n%s",
     button1 = "Yes",
     button2 = "No",
     OnAccept = function(self, data)
@@ -1377,6 +1377,7 @@ local function CreateCustomMessageDialog()
     dialog:SetFrameStrata("DIALOG")
     dialog:SetFrameLevel(100)
     dialog:EnableMouse(true)
+    dialog:SetAttribute("nodeignore", true)
     SkinPanel(dialog)
     CreateCloseButton(dialog)
 
@@ -1392,6 +1393,7 @@ local function CreateCustomMessageDialog()
         nameBox:ClearFocus()
         messageBox:ClearFocus()
         if dialog.picker then dialog.picker:Hide() end
+        StaticPopup_Hide("EMOTEPANEL_RESET_BUTTON")
     end)
 
     local iconButton = CreateTextButton(dialog, "Choose Icon")
@@ -1438,7 +1440,8 @@ local function CreateCustomMessageDialog()
     local editHint = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     editHint:SetPoint("BOTTOM", 0, 52)
     SetGlyphPrompt(editHint, function()
-        return ("%s Choose Icon    %s Save"):format(GamepadGlyph("PAD4", "Y"), GamepadGlyph("PAD1", "A"))
+        return ("%s Choose Icon    %s Save    %s Back"):format(
+            GamepadGlyph("PAD4", "Y"), GamepadGlyph("PAD1", "A"), GamepadGlyph("PAD2", "B"))
     end)
     dialog.errorText = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     dialog.errorText:SetPoint("BOTTOM", 0, 86)
@@ -1461,6 +1464,15 @@ local function CreateCustomMessageDialog()
     dialog.resetButton = resetButton
     dialog.iconButton = iconButton
     dialog.icon = icon
+    local placementHint = dialog:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    placementHint:SetPoint("BOTTOM", 0, 86)
+    SetGlyphPrompt(placementHint, function()
+        local hint = ("%s Show on wheel    %s Move"):format(
+            GamepadGlyph("PAD3", "X"), GamepadGlyph("DIRPADVERTICAL", "D-pad up/down"))
+        if resetButton:IsShown() then hint = hint .. "    " .. GamepadGlyph("PADLSHOULDER", "LB") .. " Reset" end
+        return hint
+    end)
+    dialog.placementHint = placementHint
     dialog:Hide()
 
     dialog:SetMovable(true)
@@ -1712,6 +1724,14 @@ local function RevealEditedEntry(panel, context, mode, index)
     panel:ShowPage(context == "macros" and last or first)
 end
 
+function EmotePanel:SetupEditorGamepad()
+    local dialog = self.customMessageDialog
+    if dialog and not dialog.gamepadReady and self.bindGamepadButtons and not InCombatLockdown() then
+        self.bindGamepadButtons(dialog)
+        dialog.gamepadReady = true
+    end
+end
+
 function EmotePanel:EditButton(mode, index, data, fromSettings, context)
     if not self.customMessageDialog then
         self.customMessageDialog = CreateCustomMessageDialog()
@@ -1720,6 +1740,7 @@ function EmotePanel:EditButton(mode, index, data, fromSettings, context)
     end
 
     local dialog = self.customMessageDialog
+    self:SetupEditorGamepad()
     dialog.fromSettings = fromSettings
     local creating = index == nil
     if creating then
@@ -1729,8 +1750,10 @@ function EmotePanel:EditButton(mode, index, data, fromSettings, context)
     local editableText = HasEditableText(data)
     local nativeCommand = data.actionType == "command" and data.run ~= nil
     local iconTop = editableText and 180 or 60
-    dialog:SetHeight(iconTop + 130 + (data.custom and 28 or 0) + (creating and 0 or 111))
+    dialog:SetHeight(iconTop + 130 + (data.custom and 28 or 0) + (creating and 0 or 145))
+    dialog.errorText:SetPoint("BOTTOM", 0, creating and 86 or 120)
     dialog.placement:SetShown(not creating)
+    dialog.placementHint:SetShown(not creating)
     local savePlacement
     if not creating then
         local category = mode == "emotes" and voicedEmoteTokens[GetEmoteToken(data)] == true and "voicedEmotes" or mode
@@ -1746,6 +1769,7 @@ function EmotePanel:EditButton(mode, index, data, fromSettings, context)
     dialog.messageBox.label:SetText(nativeCommand and "Slash override (optional)" or data.actionType == "emote" and "Emote (e.g. /wave)"
         or data.actionType == "command" and "Slash command" or "Message")
     dialog.resetButton:SetShown(not data.custom)
+    dialog.placementHint:SetText(glyphPrompts[dialog.placementHint]())
     dialog.iconButton:SetPoint("TOP", 20, -iconTop)
     local previousName = GetEntryName(mode, index, data)
     local previousMessage = editableText and (GetCustomMessage(mode, index) or data.action) or ""
@@ -1817,7 +1841,10 @@ function EmotePanel:EditButton(mode, index, data, fromSettings, context)
     end)
     dialog.errorText:SetText("")
     dialog.resetButton:SetScript("OnClick", function()
-        StaticPopup_Show("EMOTEPANEL_RESET_BUTTON", nil, nil, {
+        dialog.nameBox:ClearFocus()
+        dialog.messageBox:ClearFocus()
+        local hint = ("%s Yes    %s No"):format(GamepadGlyph("PAD1", "A"), GamepadGlyph("PAD2", "B"))
+        StaticPopup_Show("EMOTEPANEL_RESET_BUTTON", hint, nil, {
             mode = mode,
             index = index,
             dialog = dialog,
@@ -2674,13 +2701,10 @@ function EmotePanel:SetupGamepad()
     local input = CreateFrame("Frame", nil, frame)
     input:SetAllPoints(frame)
     self.gamepadInput = input
-    local pressed = {}
-    local activationPage
-    local function PropagateButton(propagate)
-        if not InCombatLockdown() then input:SetPropagateKeyboardInput(propagate) end
-        return propagate
+    local function CloseForGameMenu()
+        if self.customMessageDialog then self.customMessageDialog:Hide() end
+        frame:Hide()
     end
-    local function CloseForGameMenu() frame:Hide() end
     local function PreviousPage() self:CycleMode(-1) end
     local function NextPage() self:CycleMode(1) end
     local actions = {
@@ -2700,6 +2724,24 @@ function EmotePanel:SetupGamepad()
         PAD2 = function() self.customMessageDialog:Hide() end,
         PAD4 = function() self.customMessageDialog.iconButton:Click() end,
     }
+    local placementActions = {
+        PAD3 = function()
+            local show = self.customMessageDialog.placement.show
+            show:SetChecked(not show:GetChecked())
+            show:GetScript("OnClick")(show)
+        end,
+        PADDUP = function() self.customMessageDialog.placement.up:Click() end,
+        PADDDOWN = function() self.customMessageDialog.placement.down:Click() end,
+    }
+    local function ResetEntry() self.customMessageDialog.resetButton:Click() end
+    local function ClickResetConfirmation(index)
+        local popup = StaticPopup_FindVisible("EMOTEPANEL_RESET_BUTTON")
+        if popup then StaticPopup_OnClick(popup, index) end
+    end
+    local resetActions = {
+        PAD1 = function() ClickResetConfirmation(1) end,
+        PAD2 = function() ClickResetConfirmation(2) end,
+    }
     local pickerActions = {
         PADDUP = function() self.customMessageDialog.picker:MoveSelection(-8) end,
         PADDDOWN = function() self.customMessageDialog.picker:MoveSelection(8) end,
@@ -2715,39 +2757,53 @@ function EmotePanel:SetupGamepad()
         if key == "PADFORWARD" or GetBindingFromClick(key) == "TOGGLEGAMEMENU" then
             return CloseForGameMenu
         end
-        if IsResetPopupVisible() then return end
         local dialog = self.customMessageDialog
+        if dialog and dialog:IsShown() and StaticPopup_Visible("EMOTEPANEL_RESET_BUTTON") then return resetActions[key] end
+        if IsResetPopupVisible() then return end
         if dialog and dialog:IsShown() then
             if dialog.picker and dialog.picker:IsShown() then return pickerActions[key] end
-            if not dialog.nameBox:HasFocus() and not dialog.messageBox:HasFocus() then return editorActions[key] end
-            return
+            if dialog.nameBox:HasFocus() or dialog.messageBox:HasFocus() then return end
+            if key == "PADLSHOULDER" and dialog.resetButton:IsShown() then return ResetEntry end
+            return editorActions[key] or (dialog.placement:IsShown() and placementActions[key])
         end
         if key ~= "PAD4" or self.selected then return actions[key] end
     end
-    input:SetScript("OnGamePadButtonDown", function(_, key)
-        if key == "PAD1" and self.secureWheelInput and self.secureWheelInput:IsShown() then return PropagateButton(true) end
-        local action = GetAction(key)
-        if not action or (action ~= CloseForGameMenu and IsModifierKeyDown()) then return PropagateButton(true) end
-        pressed[key] = action
-        if action == actions.PAD1 then activationPage = currentPage end
-        return PropagateButton(false)
-    end)
-    input:SetScript("OnGamePadButtonUp", function(_, key)
-        if key == "PAD1" and self.secureWheelInput and self.secureWheelInput:IsShown() then
+    local function BindGamepadButtons(target, visibilityOwner)
+        local pressed = {}
+        local activationPage
+        local function PropagateButton(propagate)
+            if not InCombatLockdown() then target:SetPropagateKeyboardInput(propagate) end
+            return propagate
+        end
+        local function UseSecureBinding(key)
+            return key == "PAD1" and self.secureWheelInput and self.secureWheelInput:IsShown()
+        end
+        target:SetScript("OnGamePadButtonDown", function(_, key)
+            if UseSecureBinding(key) then return PropagateButton(true) end
+            local action = GetAction(key)
+            if not action or (action ~= CloseForGameMenu and IsModifierKeyDown()) then return PropagateButton(true) end
+            pressed[key] = action
+            if action == actions.PAD1 then activationPage = currentPage end
+            return PropagateButton(false)
+        end)
+        target:SetScript("OnGamePadButtonUp", function(_, key)
+            local action = pressed[key]
             pressed[key] = nil
-            return PropagateButton(true)
-        end
-        local action = pressed[key]
-        if not action then return PropagateButton(true) end
-        pressed[key] = nil
-        PropagateButton(false)
-        if action == actions.PAD1 and activationPage ~= currentPage then return false end
-        if action == GetAction(key) then
-            if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
-            action()
-        end
-        return false
-    end)
+            if UseSecureBinding(key) or not action then return PropagateButton(true) end
+            PropagateButton(false)
+            if action == actions.PAD1 and activationPage ~= currentPage then return false end
+            if action == GetAction(key) then
+                if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
+                action()
+            end
+            return false
+        end)
+        local owner = visibilityOwner or target
+        owner:HookScript("OnHide", function() wipe(pressed) end)
+        target:EnableGamePadButton(true)
+    end
+    self.bindGamepadButtons = BindGamepadButtons
+    BindGamepadButtons(input, frame)
     input:SetScript("OnGamePadStick", function(_, stick, x, y)
         if not WHEEL_STICKS[stick] or IsModifierKeyDown() or not self:CanUseWheel() then
             return true
@@ -2763,10 +2819,6 @@ function EmotePanel:SetupGamepad()
         end
         return false
     end)
-    frame:HookScript("OnHide", function()
-        wipe(pressed)
-    end)
-    input:EnableGamePadButton(true)
     input:EnableGamePadStick(true)
     self.gamepadReady = true
 end
@@ -3886,6 +3938,8 @@ local function ShowHelp()
     print(("  %s Open or use. %s Back or close."):format(Glyph("PAD1", "A"), Glyph("PAD2", "B")))
     print(("  On the regular wheel, %s or right-click edits. %s or middle-click toggles a favorite."):format(
         Glyph("PAD4", "Y"), Glyph("PAD3", "X")))
+    print(("  In Customize Entry, %s toggles visibility, %s moves the entry, %s resets, and %s goes back."):format(
+        Glyph("PAD3", "X"), Glyph("DIRPADVERTICAL", "D-pad up/down"), Glyph("PADLSHOULDER", "LB"), Glyph("PAD2", "B")))
     ShowPagingHelp()
 end
 
@@ -3965,6 +4019,7 @@ local function OnEvent(self, event, ...)
     elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
         if event == "PLAYER_REGEN_ENABLED" then
             if not EmotePanel.gamepadReady then EmotePanel:SetupGamepad() end
+            EmotePanel:SetupEditorGamepad()
             EmotePanel:LoadPosition()
             RestoreConsolePortCursor()
         else

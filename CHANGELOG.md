@@ -1,9 +1,10 @@
 # EmotePanel changelog
 
-## 0.22.21 for WoW: Forever (unreleased)
+## 0.22.22 for WoW: Forever (unreleased)
 
 - Enable **Remember last Action** in General settings to reopen the wheel at the last-used entry. The checkbox is saved, and the remembered entry clears on logout or UI reload.
 - Suspend the ConsolePort interface cursor while the wheel is open, including when the cursor was opened manually.
+- Use the controller to toggle visibility, reorder entries, and confirm Reset in **Customize Entry**. The dialog shows the corresponding glyphs, including Back.
 
 ## 0.22.19 for WoW: Forever
 

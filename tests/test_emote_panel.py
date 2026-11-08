@@ -347,6 +347,14 @@ lua.execute("""
     end
     function StaticPopup_Visible(name) return popup == name end
     function StaticPopup_Hide(name) if popup == name then popup = nil end end
+    function StaticPopup_FindVisible(name)
+        if popup == name then return {which = popup, data = popupData} end
+    end
+    function StaticPopup_OnClick(dialog, index)
+        assert(popup == dialog.which and (index == 1 or index == 2))
+        if index == 1 then StaticPopupDialogs[dialog.which].OnAccept(dialog, dialog.data) end
+        StaticPopup_Hide(dialog.which)
+    end
     GameTooltip = Widget()
     function GameTooltip:SetOwner(owner) self.owner = owner end
     function GameTooltip:IsOwned(owner) return self:IsShown() and self.owner == owner end
@@ -447,7 +455,8 @@ lua.execute("""
         openedPanel, openedPanelArg = name, arg
     end
     function TapWheelButton(panel, key)
-        local frame = panel.gamepadInput
+        local editor = panel.customMessageDialog
+        local frame = editor and editor:IsShown() and editor or panel.gamepadInput
         local proxy = panel.secureWheelInput
         local binding = proxy and proxy.bindings[key]
         assert(frame.scripts.OnGamePadButtonDown(frame, key) == (binding ~= nil))
@@ -679,6 +688,13 @@ lua.execute("""
         local iconBottom = -dialog.iconButton.point[3] + dialog.iconButton:GetHeight()
         local promptTop = dialog:GetHeight() - hint.point[3] - 32
         assert(promptTop - iconBottom >= 10)
+        if dialog.placement:IsShown() then
+            local placementHint = dialog.placementHint
+            local moveBottom = -dialog.placement.point[5] - dialog.placement.up.point[3] + dialog.placement.up:GetHeight()
+            local placementPromptTop = dialog:GetHeight() - placementHint.point[3] - 32
+            assert(placementHint:IsShown() and placementPromptTop - moveBottom >= 10)
+            assert(placementHint.point[3] - hint.point[3] >= 32)
+        end
     end
     AssertEditorPromptClear(sitEditor)
     tap("PAD4")
@@ -919,10 +935,14 @@ lua.execute("""
     setCursor(0, 136)
     mouse("RightButton")
     EmotePanelSavedVars.customIcons.chat[1] = 130001
-    dialog.resetButton:Click("LeftButton")
+    tap("PADLSHOULDER")
+    assert(popup == "EMOTEPANEL_RESET_BUTTON" and popupText:find(" Yes", 1, true))
+    tap("PAD2")
+    assert(not popup and dialog:IsShown() and EmotePanelSavedVars.customIcons.chat[1] == 130001)
+    tap("PADLSHOULDER")
     panel:CycleMode(1)
-    StaticPopupDialogs[popup].OnAccept(nil, popupData)
-    popup = nil
+    tap("PAD1")
+    assert(not popup and not dialog:IsShown())
     assert(not EmotePanelSavedVars.customMessages.chat[1])
     assert(not EmotePanelSavedVars.customIcons.chat[1])
     assert(EmotePanelSavedVars.customMessages.party[1] == "Saved party")
@@ -1476,23 +1496,26 @@ lua.execute("""
     rollEditor.saveButton:Click("LeftButton")
     assert(not EmotePanelSavedVars.customMessages.commands[6])
     ClickButton(FindCheckbox("Roll").parent, "Edit")
-    rollEditor.placement.show:SetChecked(false)
-    rollEditor.placement.show:Click("LeftButton")
+    assert(rollEditor.gamepad and not panel.frame:IsShown())
+    TapWheelButton(panel, "PAD3")
     assert(rollEditor.placement.location:GetText() == "Commands · Hidden")
     assert(FindCheckbox("Roll"):GetChecked())
-    rollEditor.saveButton:Click("LeftButton")
+    TapWheelButton(panel, "PAD1")
     assert(not FindCheckbox("Roll"):GetChecked())
     ClickButton(FindCheckbox("Roll").parent, "Edit")
-    rollEditor.placement.show:SetChecked(true)
-    rollEditor.placement.show:Click("LeftButton")
-    rollEditor.saveButton:Click("LeftButton")
+    TapWheelButton(panel, "PAD3")
+    TapWheelButton(panel, "PAD1")
     assert(FindCheckbox("Roll"):GetChecked())
+    ClickButton(FindCheckbox("Roll").parent, "Edit")
+    TapWheelButton(panel, "PAD2")
+    assert(not rollEditor:IsShown() and not panel.frame:IsShown())
 
     local function AddEntry(kind, name, message)
         settings:SelectSection(({ Command = "commands", Say = "chat", Party = "party", Emote = "emotes" })[kind])
         ClickButton(settings, "Add " .. kind)
         local dialog = panel.customMessageDialog
         assert(dialog:IsShown() and not dialog.resetButton:IsShown())
+        assert(not dialog.placementHint:IsShown())
         AssertEditorPromptClear(dialog)
         dialog.nameBox:SetText(name)
         dialog.messageBox:SetText(message)
@@ -2237,6 +2260,8 @@ lua.execute("""
     assert(EmotePanelSavedVars.controllerGlyphs == "playstation")
     assert(panel.gamepadHint:GetText():find("<gamepad-ps-buttoncrox-normal> Use", 1, true))
     assert(HasPrompt("<gamepad-ps-buttontriangle-normal> Choose Icon"))
+    assert(HasPrompt("<gamepad-ps-buttoncircle-normal> Back"))
+    assert(editor.placementHint:GetText():find("<gamepad-ps-buttonsquare-normal> Show on wheel", 1, true))
     assert(HasPrompt("<gamepad-ps-buttoncrox-normal> Choose"))
     glyphStyle = "Letters"
     RefreshGlyphs()
@@ -2796,7 +2821,7 @@ lua.execute("""
     panel:ActivateSector(8, "RightButton")
     local editor = panel.customMessageDialog
     assert(editor.placement.location:GetText():find("Favorites · Page 1 · Slot 8", 1, true))
-    editor.placement.down:Click("LeftButton")
+    TapWheelButton(panel, "PADDDOWN")
     assert(editor.placement.location:GetText():find("Favorites · Page 2 · Slot 1", 1, true))
     assert(saved[9].index == 9, "Reordering stays in the draft until Save")
     for _, widget in ipairs(widgets) do
@@ -2809,8 +2834,8 @@ lua.execute("""
     assert(saved[10].index == 9 and panel.titleText:GetText() == "Favorites  2 / 2")
     assert(panel.selected == 1 and panel.selectionName:GetText() == reorderedName)
     panel:ActivateSector(1, "RightButton")
-    editor.placement.up:Click("LeftButton")
-    editor.saveButton:Click("LeftButton")
+    TapWheelButton(panel, "PADDUP")
+    TapWheelButton(panel, "PAD1")
     assert(saved[9].index == 9 and panel.selected == 8)
     EmotePanel_Toggle()
 
@@ -2937,7 +2962,6 @@ lua.execute("""
         end
     end
     assert(versionLabel and versionLabel:GetText() == "v" .. addonVersion)
-    button.GetScript = function(self, name) return self.scripts[name] end
     button.scripts.OnEnter(button)
     assert(GameTooltip:IsOwned(button) and GameTooltip:GetText() == "EmotePanel v" .. addonVersion)
     button.scripts.OnDragStart(button)

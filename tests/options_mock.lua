@@ -71,6 +71,7 @@ function Widget()
     end
     function w:SetTextColor(...) self.color = {...} end
     function w:SetScript(name, callback) self.scripts[name] = callback end
+    function w:GetScript(name) return self.scripts[name] end
     function w:HookScript(name, callback)
         local previous = self.scripts[name]
         self.scripts[name] = function(...) if previous then previous(...) end;callback(...) end

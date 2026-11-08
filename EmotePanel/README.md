@@ -175,8 +175,12 @@ restores the original icons, names, and text for wheel entries.
 Open **Customize Entry** from the wheel or an Entries row. **Wheel
 Placement** shows the page and slot in its section and in Favorites, where
 applicable. Use **Show on wheel** and the fixed **Up / Down** buttons to
-adjust placement. **Save** applies placement together with customization.
-**Cancel** discards the draft. Add new entries from their section in Entries.
+adjust placement. On a controller, **X / Square** toggles visibility and
+**D-pad up/down** moves the entry. **LB / L1** opens Reset confirmation when
+available. **A / Cross** confirms and **B / Circle** backs out of the
+confirmation. In the editor, **A / Cross** saves placement and customization,
+and **B / Circle** goes back and discards the draft. Add new entries from their
+section in Entries.
 
 The wheel closes when opening EmotePanel settings. The **Settings** shortcut
 is in **Commands** and can be favorited.
