@@ -2993,23 +2993,49 @@ lua.execute("""
     click("Toggle")
     expect("Categories", 1)
     local cursorObstructed
+    local pendingTimers = {}
+    C_Timer = { After = function(_, callback) table.insert(pendingTimers, callback) end }
+    local function flushTimers()
+        for _, callback in ipairs(pendingTimers) do callback() end
+        pendingTimers = {}
+    end
+    local cursor = { shown = true }
+    function cursor:IsShown() return self.shown end
+    function cursor:SetEnabled(active)
+        assert(not combat, "The cursor fallback must leave combat transitions to ConsolePort")
+        self.shown = active
+    end
+    ConsolePortCursor = cursor
     ConsolePort = {
         SetCursorObstructor = function(_, frame, active)
             assert(frame == panel.frame)
+            -- The automatic stack handler ignores an on-demand cursor.
             cursorObstructed = active
         end,
     }
     assert(events.events.ADDON_LOADED)
     events.scripts.OnEvent(events, "ADDON_LOADED", "ConsolePort_Cursor")
-    assert(cursorObstructed and not events.events.ADDON_LOADED)
+    assert(cursorObstructed and not cursor:IsShown() and not events.events.ADDON_LOADED)
     TapWheelButton(panel, "PAD1")
     expect("Favorites", 1)
     TapWheelButton(panel, "PAD1")
     assert(cursorObstructed == false)
+    flushTimers()
+    assert(cursor:IsShown())
     click("Toggle")
     expect("Categories", 1)
-    assert(cursorObstructed)
+    assert(cursorObstructed and not cursor:IsShown())
     click("Toggle")
+    click("Toggle")
+    flushTimers()
+    assert(not cursor:IsShown())
+    cursor.shown = true
+    panel.frame.scripts.OnUpdate(panel.frame, 0)
+    assert(not cursor:IsShown())
+    click("Toggle")
+    flushTimers()
+    assert(cursor:IsShown())
+    cursor.shown = false
     rememberCheck:SetChecked(true)
     rememberCheck:Click("LeftButton")
     click("Toggle")
@@ -3019,14 +3045,18 @@ lua.execute("""
     assert(panel.secureWheelInput:GetAttribute("nodeignore"))
     TapWheelButton(panel, "PAD1")
     assert(not panel.frame:IsShown())
+    cursor.shown = true
     SlashCmdList.EMOTEPANEL("")
     expect("Actions  1 / 1", 1)
+    assert(not cursor:IsShown())
     panel:BackOrClose()
     expect("Categories", 1)
 
     combat = true
     input:combatChanged("combat")
     events.scripts.OnEvent(events, "PLAYER_REGEN_DISABLED")
+    flushTimers()
+    assert(not cursor:IsShown())
     click("Toggle")
     expect("Actions  1 / 1", 1)
     assert(cursorObstructed)
@@ -3053,6 +3083,9 @@ lua.execute("""
     input:combatChanged("peace")
     events.scripts.OnEvent(events, "PLAYER_REGEN_ENABLED")
     assert(cursorObstructed == false)
+    flushTimers()
+    assert(cursor:IsShown())
+    cursor.shown = false
     click("Toggle")
     expect("Favorites", 2)
     TapWheelButton(panel, "PAD3")
@@ -3064,7 +3097,7 @@ lua.execute("""
     assert(panel.lastAction and input:GetAttribute("resume-page") == 1)
     assert(EmotePanelSavedVars.rememberLastAction and EmotePanelSavedVars.categoryWheel)
     assert(#EmotePanelSavedVars.directActions[playerGUID] == 1)
-    ConsolePort = nil
+    ConsolePort, ConsolePortCursor, C_Timer = nil, nil, nil
 """)
 load_addon()
 lua.execute("""

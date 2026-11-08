@@ -1473,10 +1473,38 @@ local function CreateCustomMessageDialog()
 end
 
 -- EmotePanel Methods
+local function HideConsolePortCursor()
+    local cursor = _G.ConsolePortCursor
+    if not cursor or type(cursor.SetEnabled) ~= "function" or InCombatLockdown() then return end
+    local shown = cursor:IsShown()
+    if not issecretvalue(shown) and shown then
+        cursor:SetEnabled(false)
+        return cursor
+    end
+end
+
+local function RestoreConsolePortCursor()
+    if not EmotePanel.suspendedConsolePortCursor or InCombatLockdown() then return end
+    -- Let ConsolePort finish processing the visibility or combat transition first.
+    C_Timer.After(0, function()
+        local cursor = EmotePanel.suspendedConsolePortCursor
+        if cursor and not InCombatLockdown() and not EmotePanel.frame:IsVisible() then
+            EmotePanel.suspendedConsolePortCursor = nil
+            cursor:SetEnabled(true)
+        end
+    end)
+end
+
 local function SetConsolePortCursorObstructed(frame, obstructed)
     local consolePort = _G.ConsolePort
     if consolePort and consolePort.SetCursorObstructor then
         consolePort:SetCursorObstructor(frame, obstructed)
+    end
+    if obstructed then
+        -- ConsolePort's stack handler leaves its on-demand cursor active.
+        EmotePanel.suspendedConsolePortCursor = HideConsolePortCursor() or EmotePanel.suspendedConsolePortCursor
+    else
+        RestoreConsolePortCursor()
     end
 end
 
@@ -2826,6 +2854,8 @@ function EmotePanel:Initialize()
     self:LoadPosition()
     local rangeElapsed = 0
     self.frame:SetScript("OnUpdate", function(_, elapsed)
+        -- An already queued ConsolePort update can show the cursor again.
+        HideConsolePortCursor()
         if currentPage.mode ~= "macros" and currentPage.mode ~= "favorites" then return end
         rangeElapsed = rangeElapsed + elapsed
         if rangeElapsed >= RANGE_CHECK_INTERVAL then
@@ -3849,7 +3879,7 @@ local function ShowHelp()
     print("  /ep help - Show this command list")
     print("|cFF00FF00Wheel controls|r")
     print("  In combat, use Open or Close Emote Panel in WoW's Keybindings for spells, items, and macros.")
-    print("  The wheel uses its own controller navigation when ConsolePort is enabled.")
+    print("  The wheel uses its own controller navigation and pauses the ConsolePort interface cursor.")
     print("  Enable Remember last Action in /ep config to reopen at the last action until logout or /reload.")
     print(("  %s / %s or %s Select."):format(
         Glyph("PADLSTICKAXIS", "Left stick"), Glyph("PADRSTICKAXIS", "Right stick"), Glyph("DIRPADVERTICAL", "D-pad up/down")))
@@ -3936,6 +3966,7 @@ local function OnEvent(self, event, ...)
         if event == "PLAYER_REGEN_ENABLED" then
             if not EmotePanel.gamepadReady then EmotePanel:SetupGamepad() end
             EmotePanel:LoadPosition()
+            RestoreConsolePortCursor()
         else
             if EmotePanel.combatBindingReady and not EmotePanel.combatView then
                 EmotePanel.frame:StopMovingOrSizing()
