@@ -1,5 +1,15 @@
 # EmotePanel changelog
 
+## 0.23.0 for WoW: Forever
+
+- **Pet Wheel for Hunters and Warlocks.** Assign up to two keybinds in Controller Setup. Use pet commands and toggle supported autocast in combat. Glows mark autocast and active commands or stances. Use **Entries → Pet** to reorder, hide, or customize actions.
+- **Custom categories.** Give each shortcut its own name and icon. The Categories settings page shows its current icon.
+- **Clearer action feedback.** See circular cooldowns, including the global cooldown, plus spell cast progress, interrupts, charges, and procs. Turn on **Show wheel tooltips** to see spell, item, macro, and pet details.
+- **Mouse navigation.** Scroll up for the next page and down for the previous page. Right-click the center to go back or close. Scroll up from Categories to open Actions and down from Actions page 1 to return.
+- **Controller setup.** Toggle WoW controller input in the addon settings. ConsolePort is optional. Turn off Blizzard's **Gamepad (Beta)** UI. Assigning a wheel keybind replaces an existing binding on that input.
+- **Movement stick.** The stick stays locked through button presses. Turn off **Lock movement stick** if you want to move while aiming.
+- **Emotes and chat.** Highlights use your WoW chat colors. Emote pages keep the control legend and hide the slash preview. Removed Lean and Faction Cheer from the built-in list.
+
 ## 0.22.31 for WoW: Forever
 
 - Set your wheel keybind right in **Controller Setup**. Categories and cooldown numbers are on by default, and settings have hover tips.

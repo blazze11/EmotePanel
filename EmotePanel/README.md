@@ -1,4 +1,4 @@
-# EmotePanel 0.22.19
+# EmotePanel 0.23.0
 
 For WoW: Forever 1.60.1 (interface 16001). Open or close the wheel with
 `/ep`, or assign a wheel keybind in **Controller Setup** at the top of
@@ -11,9 +11,13 @@ Drag the minimap button to move it around the map. The version appears
 in the minimap tooltip and at the top of EmotePanel Options.
 
 - Aim **either stick** directly at a sector. D-pad up/down steps around
-  the wheel. LB/RB or D-pad left/right changes pages.
+  the wheel. Use LB/RB or D-pad left/right to change pages. Gold arrows
+  beside the title show the available controller paging directions.
+- Scroll up over the wheel for the next page or down for the previous
+  page. Scrolling stops at the first and last pages of a category. In the
+  Favorites-first layout, scrolling browses the full list and stops at either end.
 - **A/Cross** opens a category or uses the highlighted action. **B/Circle**
-  goes back from a category or closes the wheel.
+  or right-clicking the center goes back from a category or closes the wheel.
 - **Start/Menu** and controller buttons bound to **Game Menu** dismiss
   the wheel. **Esc** uses WoW's normal window closing order.
 - **Y/Triangle** or right-click opens the editor for an action. Choose an
@@ -21,10 +25,10 @@ in the minimap tooltip and at the top of EmotePanel Options.
 - **X/Square** or middle-click adds or removes the highlighted entry from
   Favorites. Favorites can mix emotes, chat messages, commands, game
   panels, and learned professions.
-- The full selected message or slash command appears below the footer.
-  Mouse hover also shows a tooltip. Press and release the left mouse
-  button on the same sector to use it.
-  Drag the header to move the panel. The default position is screen center.
+- The selected message or slash command appears below the control legend.
+  Emotes and Voiced Emotes keep the legend and hide the slash preview.
+  Press and release the left mouse button on the same sector to use it.
+  Drag the centered page title to move the panel. The default position is screen center.
 
 The wheel and selection highlight use Forever's stock eight-sector gamepad
 atlases. Categories with more than eight entries continue on another page.
@@ -32,35 +36,38 @@ Game Panels use the corresponding Blizzard gamepad or Collections tab
 art. Commands and messages use matching Blizzard interface icons where
 available. Individual emotes keep distinct WoW icons because Blizzard's
 emote wheel uses one shared icon. The selected entry's name appears between
-the wheel and footer. The highlight is gold for emotes, blue for Say,
-green for Party, purple for commands, teal for game panels, and orange
-for professions. Custom icons follow their entry
+the wheel and footer. Emotes, Say, and Party highlights use the colors
+from WoW's chat settings. Commands are purple, game panels are teal,
+and professions are orange. Custom icons follow their entry
 into Favorites and persist after reload.
 
 In combat, use the **Open or Close Emote Panel** keybind for protected
 actions. `/ep` opens the regular wheel for chat, emotes, and other shortcuts.
-Spells, items, and saved macros in Actions and Favorites use A/Cross or
-left-click directly. Aim with a stick as you press A/Cross. You can release
+Spells, items, saved macros, and pet actions use A/Cross or left-click
+directly. Aim with a stick as you press A/Cross. You can release
 the stick before releasing A/Cross. If you let go of the stick first, the
 highlight returns to your last confirmed selection or clears. D-pad up/down
 selects a sector that stays highlighted. Character Info stays dimmed and
 shows **Unavailable in combat**. Emotes and other ordinary shortcuts leave
 the combat wheel open. A rejected emote shows a message.
 
-For controller use, install and enable **ConsolePort**. Blizzard's
-**Gamepad (Beta)** is unsupported because it can override addon keybinds.
-Turn off **Enable Gamepad UI** under **Options → Gameplay → Gamepad**.
-At login or UI reload, EmotePanel prints a red chat warning if the wheel
-keybind is unassigned. Controller setup reminders appear in the same message
-when they apply.
+For controller use, check **Enable WoW controller input** under
+**Controller Setup** in `/ep config`. This changes WoW's game-wide
+`GamePadEnable` setting. Turn off **Enable Gamepad UI** under
+**Options → Gameplay → Gamepad** because EmotePanel does not support
+**Gamepad (Beta)**. ConsolePort is optional.
+At login or UI reload, EmotePanel warns if the wheel keybind is unassigned,
+Gamepad (Beta) is on, or a wheel has a controller binding and
+`GamePadEnable` is off. The reminder in **Controller Setup** updates
+when either controller setting changes.
 The wheel handles its own controller navigation. Its controls are excluded
 from ConsolePort's interface cursor. Opening the wheel suspends an active
 ConsolePort cursor, including one you opened manually.
 
-When a spell, item, or macro closes the combat wheel, the movement stick
-must return to center before it can move the character again. Outside
-combat, aim at an action, let the stick return to center, and then press
-A/Cross. The regular wheel keeps your selection.
+**Lock movement stick** is on by default in `/ep config`. It blocks
+movement while either wheel is open and until you center the stick after
+closing it. Turn it off to let the movement stick steer your character
+and aim the wheel at the same time.
 
 Combat uses the wheel layout and saved macro text loaded before the fight.
 Changes take effect after combat. If an item runs out mid-fight, its icon
@@ -90,16 +97,20 @@ Change **Open on Category Wheel** under **Settings → AddOns → EmotePanel →
 Categories** or use `/ep categories`. The default category wheel has eight
 shortcuts: Favorites, Emotes, Voiced Emotes, Say Chat, Party Chat, Commands,
 Game Panels, and Professions. Select a category with A/Cross or left-click.
-LB/RB, D-pad left/right, and the page arrows stay within that category.
-B/Circle or the **Back** button returns to the category wheel. Uncheck the
+LB/RB, D-pad left/right, and mouse scrolling stay within that category.
+B/Circle or right-clicking the center returns to the category wheel. Uncheck the
 option to return to Favorites-first paging. The setting is saved account-wide.
 
-On the Categories settings page, select a category once and use the fixed
-**Up** or **Down** buttons. The position shows its slot on the wheel. Uncheck
-a category to hide its segment. **Reset Order** restores the default order.
-**Reset Categories** restores visibility and turns on Category Wheel.
+Each row on the Categories settings page shows its current wheel icon.
+Use **Edit** to rename the category shortcut or change its icon. You can
+also press Y/Triangle or right-click a category on the regular wheel
+outside combat. Select a row and use **Up** or **Down** to move it, or
+uncheck it to hide its segment. **Reset Order** restores the default order.
+**Reset Categories** restores the default names, icons, order, and
+visibility and turns on Category Wheel.
 Reordering is available while Category Wheel is enabled. The Actions
-shortcut opens with LB or D-pad left when you have entries in Actions.
+shortcut opens with LB, D-pad left, or scrolling up from Categories when
+you have entries in Actions. Scroll down from Actions page 1 to return to Categories.
 
 Open **Settings → AddOns → EmotePanel → Entries** or use `/ep list`.
 Use the section dropdown to see one list at a time. `/ep list` opens
@@ -133,18 +144,58 @@ on page 1. Keep paging left for page 2 and beyond. Page right from page 1
 to return, or use B/Circle from any Actions page in Category Wheel mode.
 You can reorder, hide, or edit entries in `/ep list` and add them to Favorites.
 
+Hunters and Warlocks can assign up to two bindings under **Pet Keybind**
+in **Controller Setup** in `/ep config`. Either binding opens or closes
+the separate Pet Wheel in and out of combat. By default, it shows the
+active pet's actions in pet bar order.
+Open **Entries → Pet** under EmotePanel settings, or choose **Pet** in
+`/ep list`. Select a row and use **Up** or **Down** to reorder it, use
+**Show on wheel** to hide or show it, and use **Edit** to change its icon
+or wheel placement. **Reset Order** restores pet bar order. Your settings
+follow each action when it moves on the pet bar. Combat uses the layout
+prepared before the fight.
+
+Press **A / Cross** or left-click to issue a command. Abilities that support
+autocast show a soft gold ring when enabled. Active pet commands and
+stances show a soft green ring. The **Attack** ring pulses while the pet is
+attacking. **Move To** displays **Choose a destination** while you pick
+a spot. Unavailable actions dim, and the selected entry reports when it
+is out of range, on cooldown, or currently unavailable.
+The controller prompt shows **X Activate** when autocast is off and
+**X Disable** when it is on. Right-click the ability to toggle autocast.
+The Pet selector lights up the segment, leaving the icon ring for status.
+The segment is violet by default, green for active commands and stances,
+gold for autocast on, and blue for autocast off.
+The combat wheel uses the pet's autocast abilities prepared before the
+fight. If you swap pets in combat, the new pet's autocast controls become
+available when combat ends.
+
 Select an action and press A/Cross or left-click to use it.
 Account and character macros are listed separately. Each macro selection
 follows the saved macro by name and scope, so edits in WoW carry through.
 If you rename a macro, select it again. Macros with duplicate names in
 the same scope are skipped.
 
-Action icons in **Actions** and **Favorites** turn gray during a cooldown.
-Icons are tinted red when WoW reports the current target is too close or
-too far away. For macros, both indicators follow the spell or item WoW
-reports. Spell cooldowns skip the global cooldown. Countdown numbers are
-on by default. Use **Show action cooldowns** in `/ep config` to hide them.
-The setting is saved account-wide.
+Enable **Show wheel tooltips** under **Wheel behavior** in `/ep config`
+to see details on mouse hover or when selecting spells, items, macros,
+and pet actions with a stick or the D-pad. Wheel tooltips are off by default.
+Spells, items, and pet actions use WoW's tooltip. Macros show their
+scope and command text, including the version loaded before combat.
+
+**Actions**, **Favorites**, and the **Pet Wheel** show cooldowns with a
+circular swipe over the icon. The spell global cooldown animates with the
+swipe alone. Individual cooldowns also turn icons gray. Icons are tinted
+red when WoW reports the current target is too close or too far away.
+Below the legend, range and availability warnings use soft red, cooldowns
+use amber, and active pet commands and stances use green. The line is
+blank when there is no status to show.
+Macros use the cooldown and range of the spell or item WoW reports.
+Countdown numbers are on by default. Use **Show action cooldowns** in
+`/ep config` to hide the numbers. The setting is saved account-wide.
+
+Wheel icons depress when you press A/Cross or click. Actions and Favorites
+also show spell cast and channel progress, an interrupt flash, a charge
+recovery edge, and Blizzard's proc glow when a spell lights up.
 
 Use **Add Emote**, **Add Say**, **Add Party**, or **Add Command** to create
 an entry in that category. Enter a name and an emote such as `/wave`, a
@@ -162,18 +213,19 @@ entry is no longer visible, the wheel uses its usual opening page.
 and help. **Automatic** follows WoW’s active icon set. You can choose Xbox,
 PlayStation, or Nintendo Switch when the client has the corresponding art.
 This changes the prompts. The physical controls keep their assignments.
-In **Controller Setup**, click either wheel keybind slot and press a
-keyboard key or controller button. Press Esc to cancel or right-click a
-slot to clear it. Bindings save to WoW's active account or character set.
+In **Controller Setup**, click a keybind slot and press a keyboard key or
+controller button. If the input already has a WoW binding, the wheel
+replaces it. Press Esc to cancel or right-click a slot to clear it.
+Bindings save to WoW's active account or character set.
 Hover over settings controls for descriptions. **Reset General** restores
-the close-after-action, last-action, and cooldown display defaults.
+the defaults for wheel behavior, cooldown numbers, movement stick lock, and wheel tooltips.
 Use **Reset to Defaults** in General to clear all saved EmotePanel settings,
 custom entries and overrides, Favorites, and Action selections for every
 character on the account. Confirm outside combat to reload the UI with the
 defaults. WoW keybinds stay assigned.
 
-Under **Customization**, **Wheel Display** has separate toggles for the
-Help (?) button, Close (X) button, and keybind legend. **Wheel position**
+Under **Customization**, use **Show keybind legend** to control whether
+the controller shortcuts appear below the wheel. **Wheel position**
 has two sliders that show your current position from **0%** to **100%**.
 **50%** is centered. Higher X values move the wheel right, and higher Y
 values move it up. Drag the slider or click its arrows to adjust it by
@@ -197,10 +249,11 @@ The wheel closes when opening EmotePanel settings. The **Settings** shortcut
 is in **Commands** and can be favorited.
 
 **Emotes** and **Voiced Emotes** follow the two Blizzard chat menus.
-The wheel includes the stock entries from both menus alongside the
-original extra emotes. Built-in entries have distinct default icons within
+The wheel includes stock entries from both menus alongside the original
+extra emotes. EmotePanel skips Lean and Faction Cheer on Forever.
+Built-in entries have distinct default icons within
 their category. **Add Emote** uses WoW's voice list to choose the
-category automatically. Faction Cheer uses the character's faction.
+category automatically.
 
 Open **Game Panels** from the category wheel or page right past Favorites
 in the default layout. The first page has
@@ -261,7 +314,7 @@ name and text.
 | `/ep config` | Open EmotePanel settings. |
 | `/ep list` | Reorder Favorites and manage wheel entries. |
 | `/ep actions` | Choose spells, items, and saved macros for the Actions wheel. |
-| `/ep categories` | Set up and reorder the opening Category Wheel. |
+| `/ep categories` | Customize and reorder Category Wheel shortcuts. |
 | `/ep reset` | Ask to reset custom icons, names, and text. |
 | `/ep debug` | Show combat debug status. |
 | `/ep debug on`, `/ep debug off` | Turn combat logging on or off for this session. |

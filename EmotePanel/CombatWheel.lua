@@ -1,6 +1,7 @@
 local EmotePanel = EmotePanel
 local INPUT_NAME = "EmotePanelCombatInput"
 local WHEEL_BINDING = "CLICK " .. INPUT_NAME .. ":Toggle"
+local PET_BINDING = "CLICK " .. INPUT_NAME .. ":TogglePet"
 local LEGACY_BINDING = "Open Emote Panel"
 
 -- Only restricted handlers may change these bindings or action attributes in combat.
@@ -10,6 +11,9 @@ local BIND = [[
     if self:IsShown() then
         self:SetBindingClick(true, "PAD1", name, self:GetAttribute("accept"))
         self:SetBindingClick(true, "PAD2", name, "Back")
+        if self:GetAttribute("pet-wheel") then
+            self:SetBindingClick(true, "PAD3", name, "PetAutocast")
+        end
         self:SetBindingClick(true, "PADFORWARD", name, "Close")
         self:SetBindingClick(true, "ESCAPE", name, "Close")
         self:SetBindingClick(true, "PADLSHOULDER", name, "Left")
@@ -44,37 +48,43 @@ local SHOW_PAGE = [[
 
 -- Coordinates are relative to the same panel bounds used by the display.
 local HIT = [[
+    local button = ...
     local x, y = self:GetMousePosition()
     if not x then return end
     x, y = x * self:GetWidth(), y * self:GetHeight()
-    for _, control in ipairs(newtable("Left", "Right", "Back", "Close")) do
-        local left = self:GetAttribute(control .. "-left")
-        local right = self:GetAttribute(control .. "-right")
-        local bottom = self:GetAttribute(control .. "-bottom")
-        local top = self:GetAttribute(control .. "-top")
-        if left and x >= left and x <= right and y >= bottom and y <= top then return control end
-    end
     x, y = x - self:GetAttribute("wheel-x"), y - self:GetAttribute("wheel-y")
     local distance = x * x + y * y
-    if distance < self:GetAttribute("inner-squared") or distance > self:GetAttribute("outer-squared") then return end
+    if distance < self:GetAttribute("inner-squared") then
+        if button == "RightButton" then return "Back" end
+        return
+    end
+    if distance > self:GetAttribute("outer-squared") then return end
     return math.floor(math.atan2(x, y) / (math.pi / 4) + 0.5) % 8 + 1
 ]]
 
 local PRE_CLICK = [[
     self:SetAttribute("type", nil)
     self:SetAttribute("commit", nil)
+    self:SetAttribute("autocast-commit", nil)
     local combat = SecureCmdOptionParse("[combat] 1; 0") == "1"
-    if button == "Toggle" then
+    if button == "Toggle" or button == "TogglePet" then
         if down then return end
+        local pet = button == "TogglePet"
+        local prefix = pet and "pet-" or ""
+        local start = self:GetAttribute(prefix .. "start")
+        if start == nil then return end
         if not combat then
-            self:CallMethod("ToggleDisplay")
-        elseif self:IsShown() then
+            self:CallMethod("ToggleDisplay", pet)
+        elseif self:IsShown() and self:GetAttribute("pet-wheel") == pet then
             self:RunAttribute("close-wheel")
         else
-            self:Show()
+            self:SetAttribute("pet-wheel", pet)
+            if not self:IsShown() then
+                self:Show()
+            end
             self:RunAttribute("bind-input")
-            local page = self:GetAttribute("resume-page") or self:GetAttribute("start")
-            self:RunAttribute("show-page", page, self:GetAttribute("resume-sector"))
+            local page = self:GetAttribute(prefix .. "resume-page") or start
+            self:RunAttribute("show-page", page, self:GetAttribute(prefix .. "resume-sector"))
         end
         return
     end
@@ -84,9 +94,14 @@ local PRE_CLICK = [[
     local prefix = "p" .. page .. "-"
     local count = self:GetAttribute(prefix .. "count")
     local target = button
-    if button == "LeftButton" then target = self:RunAttribute("hit") end
+    if button == "LeftButton" or button == "RightButton" then target = self:RunAttribute("hit", button) end
+    local toggleAutocast = button == "PetAutocast" or (button == "RightButton" and type(target) == "number")
+    if toggleAutocast and not self:GetAttribute("pet-wheel") then
+        if button == "PetAutocast" then return end
+        target = nil
+    end
     if down then
-        if button == "Accept" then
+        if button == "Accept" or button == "PetAutocast" then
             target = nil
             if not IsModifierKeyDown() then
                 target = self:RunAttribute("aim", count) or self:GetAttribute("sector")
@@ -95,15 +110,17 @@ local PRE_CLICK = [[
         self:SetAttribute("press-page", page)
         self:SetAttribute("press-target", target)
         self:SetAttribute("press-button", button)
+        if type(target) == "number" then self:CallMethod("DrawPress", button, target) end
         return
     end
     local pressedTarget = self:GetAttribute("press-target")
     local pressed = self:GetAttribute("press-page") == page and self:GetAttribute("press-button") == button
-    if button == "Accept" then target = pressedTarget end
+    if button == "Accept" or button == "PetAutocast" then target = pressedTarget end
     self:SetAttribute("press-page", nil)
     self:SetAttribute("press-target", nil)
     self:SetAttribute("press-button", nil)
-    if not target or not pressed or pressedTarget ~= target then
+    self:CallMethod("DrawPress", button)
+    if not target or not pressed or pressedTarget ~= target or (toggleAutocast and type(target) ~= "number") then
         if button == "Accept" then self:CallMethod("DebugClick", "Input", "A/Cross canceled", "page " .. page) end
         return
     end
@@ -113,7 +130,7 @@ local PRE_CLICK = [[
     elseif target == "Left" or target == "Right" or target == "Back" then
         local destination = self:GetAttribute(prefix .. target)
         if destination then self:RunAttribute("show-page", destination)
-        elseif target == "Back" and button ~= "LeftButton" then self:RunAttribute("close-wheel") end
+        elseif target == "Back" then self:RunAttribute("close-wheel") end
     elseif target == "Up" or target == "Down" then
         if count > 0 then
             local sector = self:GetAttribute("sector")
@@ -123,7 +140,7 @@ local PRE_CLICK = [[
                 sector = target == "Up" and count or 1
             end
             self:SetAttribute("sector", sector)
-            self:CallMethod("DrawSelection", sector)
+            self:CallMethod("DrawSelection", sector, true)
         end
     elseif type(target) == "number" then
         if IsModifierKeyDown() and button ~= "LeftButton" then return end
@@ -133,6 +150,22 @@ local PRE_CLICK = [[
         self:CallMethod("DrawSelection", sector)
         local kind = self:GetAttribute(prefix .. sector .. "-kind")
         local value = self:GetAttribute(prefix .. sector .. "-value")
+        if kind == "pet" and (HasVehicleActionBar() or SecureCmdOptionParse("[@pet,exists,nodead] 1; 0") ~= "1") then
+            return
+        end
+        if toggleAutocast then
+            local macro = self:GetAttribute(prefix .. sector .. "-autocast")
+            local petName = self:GetAttribute("autocast-pet")
+            if macro and petName then
+                local _, activePet = PlayerPetSummary()
+                if activePet == petName then
+                    self:SetAttribute("macrotext", macro)
+                    self:SetAttribute("type", "macro")
+                    self:SetAttribute("autocast-commit", true)
+                end
+            end
+            return
+        end
         if value == nil then
             self:CallMethod("ShowUnavailable", kind, sector)
             return
@@ -141,8 +174,9 @@ local PRE_CLICK = [[
             self:RunAttribute("show-page", value)
         else
             if self:GetAttribute("remember-last-action") then
-                self:SetAttribute("resume-page", page)
-                self:SetAttribute("resume-sector", sector)
+                local resumePrefix = self:GetAttribute("pet-wheel") and "pet-" or ""
+                self:SetAttribute(resumePrefix .. "resume-page", page)
+                self:SetAttribute(resumePrefix .. "resume-sector", sector)
                 self:CallMethod("RememberAction", sector)
             end
             if kind == "ordinary" then
@@ -150,6 +184,10 @@ local PRE_CLICK = [[
                 self:CallMethod("UseOrdinary", sector, button == "LeftButton")
             elseif kind == "spell" or kind == "item" or kind == "macro" then
                 self:SetAttribute(kind == "macro" and "macrotext" or kind, value)
+                self:SetAttribute("type", kind)
+                self:SetAttribute("commit", true)
+            elseif kind == "pet" then
+                self:SetAttribute("action", value)
                 self:SetAttribute("type", kind)
                 self:SetAttribute("commit", true)
             end
@@ -160,15 +198,21 @@ local PRE_CLICK = [[
 local POST_CLICK = [[
     local kind = self:GetAttribute("type")
     local close = self:GetAttribute("commit") and self:GetAttribute("close-after-action")
-    if kind then self:CallMethod("FinishSecureAction", kind, close, button) end
+    if self:GetAttribute("autocast-commit") then
+        self:CallMethod("RefreshPetAutocast")
+    elseif kind then
+        self:CallMethod("FinishSecureAction", kind, close, button)
+    end
     self:SetAttribute("type", nil)
     self:SetAttribute("spell", nil)
     self:SetAttribute("item", nil)
+    self:SetAttribute("action", nil)
     self:SetAttribute("macrotext", nil)
     if close then
         self:RunAttribute("close-wheel")
     end
     self:SetAttribute("commit", nil)
+    self:SetAttribute("autocast-commit", nil)
 ]]
 
 -- Read the state inside the snippet. RunAttribute scrubs table arguments.
@@ -199,25 +243,7 @@ local function MovementStickHeld(index)
     return stick and (stick.x ~= 0 or stick.y ~= 0)
 end
 
-function EmotePanel:CreateWheelMovementGuard()
-    -- Keep receiving stick input after the secure wheel and its bindings close.
-    local guard = CreateFrame("Frame", nil, UIParent)
-    guard:Hide()
-    guard:SetFrameStrata("TOOLTIP")
-    guard:EnableGamePadStick(true)
-    guard:SetScript("OnGamePadStick", function(frame, stick, x, y)
-        if stick ~= "Movement" and stick ~= "Left" then return true end
-        if x ~= 0 or y ~= 0 then return false end
-        if stick == frame.movementStick then frame:Hide() end
-        return true
-    end)
-    guard:SetScript("OnUpdate", function(frame)
-        if not MovementStickHeld(frame.movementIndex) then frame:Hide() end
-    end)
-    self.wheelMovementGuard = guard
-end
-
-local function HoldWheelMovement(guard)
+local function GetHeldMovementStick()
     local index, leftIndex = 0
     local name = C_GamePad.StickIndexToConfigName(index)
     while name and name ~= "Movement" do
@@ -227,12 +253,54 @@ local function HoldWheelMovement(guard)
     end
     local movementIndex = name and index + 1 or leftIndex
     if movementIndex and MovementStickHeld(movementIndex) then
-        guard.movementIndex = movementIndex
-        guard.movementStick = name or "Left"
-        guard:Show()
-        return true
+        return movementIndex, name or "Left"
     end
-    return false
+end
+
+function EmotePanel:CreateWheelMovementGuard()
+    -- Button handlers change their propagation to reach WoW bindings. This frame handles only sticks.
+    local guard = CreateFrame("Frame", nil, UIParent)
+    guard:Hide()
+    guard:SetAttribute("nodeignore", true)
+    guard:SetFrameStrata("TOOLTIP")
+    guard:SetPropagateKeyboardInput(false)
+    guard:EnableGamePadStick(true)
+    guard:SetScript("OnGamePadStick", function(frame, stick, x, y)
+        local movement = stick == "Movement" or stick == "Left"
+        local lockMovement = EmotePanelSavedVars.lockMovementStick ~= false
+        local neutral = x == 0 and y == 0
+        if frame.wheelOpen then
+            if not STICKS[stick] then return true end
+            if movement and neutral then return true end
+            if IsModifierKeyDown() or not self:CanUseWheel() then return not (movement and lockMovement) end
+            if not self.combatView and self.gamepadInput:IsShown() then self:AimWheel(x, y) end
+            return movement and not lockMovement
+        end
+        if not movement or not lockMovement then return true end
+        if not neutral then return false end
+        if stick == frame.movementStick then frame:Hide() end
+        return true
+    end)
+    guard:SetScript("OnUpdate", function(frame)
+        if not frame.wheelOpen and (EmotePanelSavedVars.lockMovementStick == false
+            or not MovementStickHeld(frame.movementIndex)) then frame:Hide() end
+    end)
+    self.wheelMovementGuard = guard
+    self:SetWheelMovementCapture(self.frame:IsShown())
+end
+
+function EmotePanel:SetWheelMovementCapture(open)
+    local guard = self.wheelMovementGuard
+    if not guard then return end
+    guard.wheelOpen = open
+    if open then
+        guard:Show()
+    elseif EmotePanelSavedVars.lockMovementStick ~= false then
+        guard.movementIndex, guard.movementStick = GetHeldMovementStick()
+        guard:SetShown(guard.movementIndex ~= nil)
+    else
+        guard:Hide()
+    end
 end
 
 local function ReadAim(button, count)
@@ -260,11 +328,7 @@ local function CreateCombatInput(self)
     button:SetFrameLevel(self.frame:GetFrameLevel() + 10)
     button:SetClampedToScreen(true)
     button:EnableMouse(true)
-    button:EnableGamePadStick(true)
-    button:SetScript("OnGamePadStick", function(_, stick, x, y)
-        if not STICKS[stick] or IsModifierKeyDown() then return true end
-        return (stick == "Movement" or stick == "Left") and x == 0 and y == 0
-    end)
+    button:EnableMouseWheel(true)
     button:RegisterForClicks("AnyDown", "AnyUp")
     button:SetAttribute("useOnKeyDown", false)
     button:SetAttribute("bind-input", BIND)
@@ -275,15 +339,17 @@ local function CreateCombatInput(self)
     button:SetAttribute("_onstate-combat", [[
         if newstate ~= "combat" then self:RunAttribute("close-wheel") end
     ]])
-    function button:ToggleDisplay() EmotePanel_Toggle() end
+    function button:ToggleDisplay(pet) EmotePanel:ToggleWheel(pet) end
     function button:DrawPage(page, sector)
         EmotePanel:CombatDebug("Wheel", EmotePanel.combatPages[page].title)
         EmotePanel:ShowCombatPage(page, sector)
     end
     function button:CloseDisplay() EmotePanel:CloseCombatDisplay() end
-    function button:DrawSelection(sector) EmotePanel:Select(sector) end
+    function button:DrawSelection(sector, showTooltip) EmotePanel:Select(sector, showTooltip) end
+    function button:DrawPress(input, sector) EmotePanel:SetWheelPressed(sector, input) end
     function button:RememberAction(sector) EmotePanel:RememberAction(sector) end
     function button:UseOrdinary(sector, fromMouse) EmotePanel:ActivateCombatSector(sector, fromMouse) end
+    function button:RefreshPetAutocast() EmotePanel:RefreshPetAutocast() end
     function button:ShowUnavailable(kind, sector)
         if EmotePanel.combatDebug then
             EmotePanel:CombatDebug("Unavailable", kind, "sector " .. sector)
@@ -292,64 +358,80 @@ local function CreateCombatInput(self)
         end
     end
     function button:FinishSecureAction(kind, close, input)
-        local movementHeld = close and HoldWheelMovement(EmotePanel.wheelMovementGuard)
         if EmotePanel.combatDebug then
+            local movementHeld = close and EmotePanelSavedVars.lockMovementStick ~= false and GetHeldMovementStick()
             local page = EmotePanel.combatPages[self:GetAttribute("page")]
             EmotePanel:CombatDebug("Secure click", kind, page.title, "sector " .. self:GetAttribute("sector"),
                 input, movementHeld and "movement held until neutral" or nil)
         end
     end
     function button:DebugClick(...) EmotePanel:CombatDebug(...) end
+    button:SetScript("OnEnter", function() EmotePanel:StartWheelMouseTooltip() end)
+    button:SetScript("OnLeave", function()
+        EmotePanel:StopWheelMouseTooltip()
+        EmotePanel:SetWheelPressed(nil, "LeftButton")
+        EmotePanel:SetWheelPressed(nil, "RightButton")
+    end)
     button:SetScript("OnUpdate", function(input)
         if not EmotePanel.combatView then return end
         local page = EmotePanel.combatPages[input:GetAttribute("page")]
-        local selected
-        if input:GetAttribute("press-button") == "Accept" then
+        local selected, aim
+        local pressed = input:GetAttribute("press-button")
+        if pressed == "Accept" or pressed == "PetAutocast" then
             selected = input:GetAttribute("press-target")
         else
-            selected = ReadAim(input, page.count) or input:GetAttribute("sector")
+            aim = ReadAim(input, page.count)
+            selected = aim or input:GetAttribute("sector")
         end
-        if selected ~= EmotePanel.selected then EmotePanel:Select(selected) end
+        if selected ~= EmotePanel.selected then
+            EmotePanel:Select(selected, true)
+        elseif aim then
+            EmotePanel:ShowWheelEntryTooltip(aim)
+        end
     end)
     SecureHandlerWrapScript(button, "PreClick", button, PRE_CLICK)
     SecureHandlerWrapScript(button, "PostClick", button, POST_CLICK)
+    SecureHandlerWrapScript(button, "OnMouseWheel", button, [[
+        if offset == 0 or not self:IsVisible() then return end
+        local page = self:GetAttribute("page")
+        if not page then return end
+        local direction = offset > 0 and "ScrollUp" or "ScrollDown"
+        local destination = self:GetAttribute("p" .. page .. "-" .. direction)
+        if destination then self:RunAttribute("show-page", destination) end
+    ]])
     self.combatInput = button
     return button
 end
 
-local function SetRect(button, name, left, bottom, width, height)
-    button:SetAttribute(name .. "-left", left)
-    button:SetAttribute(name .. "-bottom", bottom)
-    button:SetAttribute(name .. "-right", left + width)
-    button:SetAttribute(name .. "-top", bottom + height)
-end
-
-function EmotePanel:GetWheelBinding(slot)
-    local primary, secondary = GetBindingKey(WHEEL_BINDING)
+function EmotePanel:GetWheelBinding(slot, pet)
+    local primary, secondary = GetBindingKey(pet and PET_BINDING or WHEEL_BINDING)
     if slot == 1 then return primary end
     return secondary
 end
 
-function EmotePanel:HasWheelBinding()
-    return self:GetWheelBinding(1) ~= nil
+function EmotePanel:HasWheelBinding(pet)
+    return self:GetWheelBinding(1, pet) ~= nil
 end
 
-function EmotePanel:SetWheelBinding(slot, key)
+function EmotePanel:SetWheelBinding(slot, key, pet)
     if InCombatLockdown() then return false, "Set the wheel keybind outside combat." end
     local bindingSet = GetCurrentBindingSet()
     if bindingSet ~= 1 and bindingSet ~= 2 then return false, "No editable binding set is active." end
-    local previous = self:GetWheelBinding(slot)
-    if previous == key then return true end
+    local previous = self:GetWheelBinding(slot, pet)
     local action = key and GetBindingAction(key)
-    if action and action ~= "" then
-        return false, GetBindingText(key) .. " is already bound to " .. GetBindingName(action) .. "."
-    end
+    if previous == key or action == (pet and PET_BINDING or WHEEL_BINDING) then return true end
+    if action == "" then action = nil end
 
     self.migratingWheelBinding = true
     local changed = not previous or SetBinding(previous, nil)
-    if changed and key and not SetBindingClick(key, INPUT_NAME, "Toggle") then
-        if previous then SetBindingClick(previous, INPUT_NAME, "Toggle") end
-        changed = false
+    local opener = pet and "TogglePet" or "Toggle"
+    if changed and key then
+        local cleared = not action or SetBinding(key, nil)
+        changed = cleared and SetBindingClick(key, INPUT_NAME, opener)
+        if not changed then
+            if cleared and action then SetBinding(key, action) end
+            if previous then SetBindingClick(previous, INPUT_NAME, opener) end
+        end
     end
     if changed then SaveBindings(bindingSet) end
     self.migratingWheelBinding = nil
@@ -361,43 +443,58 @@ end
 function EmotePanel:SyncCombatResume()
     local button = self.combatInput
     if not button or InCombatLockdown() or self.combatView then return end
-    local pageIndex, selection
-    if EmotePanelSavedVars.rememberLastAction and self.lastAction then
+    local pageIndex, selection, petPage, petSelection
+    if EmotePanelSavedVars.rememberLastAction then
         for index, page in pairs(self.combatPages) do
             local sector = self:FindRememberedSector(page)
             if sector and page.actions[sector].value ~= nil then
-                pageIndex, selection = index, sector
-                break
+                if page.mode == "pet" then
+                    petPage, petSelection = index, sector
+                else
+                    pageIndex, selection = index, sector
+                end
             end
         end
     end
     button:SetAttribute("resume-page", pageIndex)
     button:SetAttribute("resume-sector", selection)
+    button:SetAttribute("pet-resume-page", petPage)
+    button:SetAttribute("pet-resume-sector", petSelection)
 end
 
 function EmotePanel:SyncCombatWheel(refreshControls)
     if InCombatLockdown() or self.combatView or not self.wheel or self.migratingWheelBinding then return end
     if not refreshControls and not self.combatLayoutDirty then return end
     local legacyKeys = { GetBindingKey(LEGACY_BINDING) }
-    if #legacyKeys == 0 and not self:HasWheelBinding() and not self.combatInput then return end
+    local hasPetBinding = self.supportsPetWheel and self:HasWheelBinding(true)
+    if #legacyKeys == 0 and not self:HasWheelBinding() and not hasPetBinding and not self.combatInput then return end
     local new = not self.combatInput
     local button = self.combatInput or CreateCombatInput(self)
     if new or refreshControls then self:ConfigureCombatInput(button) end
 
     if new or self.combatLayoutDirty then
-        local pages, start = self:BuildCombatLayout()
+        local pages, start, petStart = self:BuildCombatLayout()
         self.combatPages = pages
         self.combatLayoutDirty = nil
         button:SetAttribute("start", start)
+        button:SetAttribute("pet-start", petStart)
+        local petName = petStart and UnitName("pet")
+        self.combatAutocastPet = not issecretvalue(petName) and petName or nil
+        button:SetAttribute("autocast-pet", self.combatAutocastPet)
         for index, page in pairs(pages) do
             local prefix = "p" .. index .. "-"
             button:SetAttribute(prefix .. "count", page.count)
             button:SetAttribute(prefix .. "Left", page.left)
             button:SetAttribute(prefix .. "Right", page.right)
             button:SetAttribute(prefix .. "Back", page.back)
+            button:SetAttribute(prefix .. "ScrollUp", page.scrollUp)
+            button:SetAttribute(prefix .. "ScrollDown", page.scrollDown)
             for sector, entry in ipairs(page.actions) do
                 button:SetAttribute(prefix .. sector .. "-kind", entry.kind)
                 button:SetAttribute(prefix .. sector .. "-value", entry.value)
+                if entry.kind == "pet" then
+                    button:SetAttribute(prefix .. sector .. "-autocast", entry.autocast)
+                end
             end
         end
     end
@@ -438,10 +535,6 @@ function EmotePanel:ConfigureCombatInput(button)
     button:SetAttribute("wheel-y", height - 54 - wheelRadius)
     button:SetAttribute("inner-squared", (75 * scale) ^ 2)
     button:SetAttribute("outer-squared", (234 * scale) ^ 2)
-    SetRect(button, "Left", width / 2 - 125, height - 43, 14, 22)
-    SetRect(button, "Right", width / 2 + 111, height - 43, 14, 22)
-    SetRect(button, "Back", width / 2 - 172, height - 37, 40, 24)
-    SetRect(button, "Close", width - 40, height - 40, 30, 30)
 
     local stickCount = 0
     local stickIndex = 0
