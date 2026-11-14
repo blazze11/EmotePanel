@@ -2,10 +2,20 @@
 ## Title: EmotePanel
 ## Notes: Controller wheel for emotes, quick chat, professions, and game panels
 ## Author: Blazze
-## Version: 0.23.0
+## Version: 0.24.0
 ## IconAtlas: gamepad-radial-icon-chat
 ## AddonCompartmentFunc: EmotePanel_OnAddonCompartmentClick
 ## SavedVariables: EmotePanelSavedVars
 
 EmotePanel.lua
+Widgets.lua
+EmoteText.lua
+Entries.lua
+Pages.lua
+Bindings.lua
+Wheel.lua
+Input.lua
 CombatWheel.lua
+EntryEditor.lua
+ActionPicker.lua
+Settings.lua

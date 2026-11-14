@@ -1,5 +1,17 @@
 # EmotePanel changelog
 
+## 0.24.0 for WoW: Forever
+
+- **Settings and Help.** A WoW Social-style settings window adds side tabs, controller shortcuts, reset confirmations, and a five-second keybind dialog. Confirmation dialogs respect the ConsolePort cursor. `/ep help` opens a nine-page guide. Open settings with `/ep` or by left-clicking the minimap or Addon Compartment shortcut. Open either wheel with its assigned keybind. Wheel position can follow WoW’s vertical cursor center and does by default on fresh installs.
+- **Wheel navigation.** Mouse and gamepad category selection survives background refreshes. Both wheels fade in and out and offer optional sounds and vibration. Toggle the control legend with View / Select and optionally hide its prompt. Segment and page repeat have separate timings adjustable in 10 ms steps outside combat. Either can stop at its ends in or out of combat.
+- **Actions.** Add or remove spells and items from ConsolePort's spellbook and bag menus. Automatic quest items and abilities and Highest learned rank only are on by default. Wheel icons show item counts and spell charges. Call Pet updates its icon after a stable swap.
+- **Commands and Game Panels.** Backpack toggles all bags from Commands. Game Panels adds shortcuts such as Reputation, PvP, and Appearances. Protected shortcuts, including Chat Channels, dim in combat.
+- **Target Markers.** Open all eight marks from Categories or Commands. Press Y/Triangle to mark yourself. X/Square or the center icon clears your target's mark, or your own when you have no target. Use your assigned wheel keybind in combat.
+- **Pet Wheel.** Revive your pet in combat and reopen the wheel with its prepared order and autocast shortcuts when available. The wheel closes when the pet dies or is dismissed. Pet Spellbook dims when no pet is summoned.
+- **Entries and Favorites.** Updated Blizzard artwork for categories, emotes, and quick messages. Fixed stale segment icons when a texture fails to load. Categories and action types have distinct highlight colors. Professions and Player Interactions replace Emotes and Voiced Emotes on the default Category Wheel. Gold stars identify favorited entries. Add or remove Favorites and reorder an entry in both its category and Favorites from the same editor.
+- **Custom entries.** Preview emote text, add custom `/me` emotes, and delete custom entries with confirmation. Creation dialogs show example hints in empty fields.
+- **Player Interactions.** Find Inspect, View Talents, Add Friend, Follow, Trade, Duel, contextual Invite, Remove from Group with confirmation, and Leave Group. Leave Group also gets its own final Actions page when automatic entries are enabled.
+
 ## 0.23.0 for WoW: Forever
 
 - **Pet Wheel for Hunters and Warlocks.** Assign up to two keybinds in Controller Setup. Use pet commands and toggle supported autocast in combat. Glows mark autocast and active commands or stances. Use **Entries → Pet** to reorder, hide, or customize actions.
