@@ -1,47 +1,20 @@
 # EmotePanel for WoW: Forever
 
-EmotePanel is an eight-slot wheel for controller and mouse. Keep spells, items, saved macros, emotes, quick chat, professions, and Blizzard panel shortcuts within reach. The wheel opens on Categories by default, and Favorites gives you a page for the entries you use most.
-
-Hunters and Warlocks get a separate Pet Wheel with two keybind slots. Use it for pet commands and autocast, and see the active stance, cooldowns, and range at a glance.
+An eight-slot wheel for controller and mouse. Keep spells, items, macros, quick chat, and game shortcuts together. Customize Categories and Favorites, mark targets, or use a separate Pet Wheel on Hunters and Warlocks.
 
 ## Get started
 
-1. Download the Forever ZIP from [GitHub Releases](https://github.com/blazze11/EmotePanel/releases) or [CurseForge](https://www.curseforge.com/wow/addons/emote-panel/files).
-2. Extract the `EmotePanel` folder into `World of Warcraft/_forever_/Interface/AddOns/`. Enable EmotePanel in the AddOns menu and run `/reload` if you're updating while logged in.
-3. Assign a wheel keybind under **Controller Setup** at the top of `/ep config`. Use this keybind to open the wheel in and out of combat.
-4. For controller play, check **Enable WoW controller input** under **Controller Setup**, then turn off **Enable Gamepad UI** under **Options → Gameplay → Gamepad**. ConsolePort is optional.
+1. Download the Forever ZIP and extract `EmotePanel` into `World of Warcraft/_forever_/Interface/AddOns/`. [GitHub Releases](https://github.com/blazze11/EmotePanel/releases) · [CurseForge](https://www.curseforge.com/wow/addons/emote-panel/files)
+2. Type `/ep`. Under **General → Controller Setup**, assign a **Wheel Keybind** and, if needed, a **Pet Keybind**.
+3. Use your assigned keybind to open the wheel. Open **Actions** in Settings to add spells, items, and macros.
 
-This branch targets **WoW: Forever 1.60.1** (interface `16001`).
-
-## Build your wheel
-
-- **`/ep actions`** opens the Abilities, Items, and Macros picker. Click a row to add it and click again to remove it. Page left from Favorites or Categories to reach Actions.
-- **`/ep list`** opens Favorites in Entries. Switch sections to show, hide, edit, and reorder entries. Select a row once and use the fixed **Up / Down** buttons.
-- **`/ep categories`** sets up the Category Wheel, which opens by default. Choose which categories appear, reorder them, and give each shortcut its own name and icon.
-- **`/ep config`** opens settings. Use **General** for keybinds, **Wheel Behavior** for opening and navigation options, and **Customization** for display, sounds, and wheel position. Use **Reset to Defaults** in General to reset EmotePanel across all characters while keeping your WoW keybinds.
-
-In EmotePanel settings, use **LB/RB** to switch side tabs, **D-pad up/down** to move focus, **left/right** to adjust a value, and **A/Cross** to select. **B/Circle** closes settings.
-
-Actions, Favorites, and the Pet Wheel show circular cooldown swipes, including the global cooldown, and tint icons red when WoW reports the target is out of range. Use **Show action cooldowns** to hide countdown numbers or turn on **Show wheel tooltips** for spell, item, macro, and pet details. Say and Party each start with 16 quick messages, including campfire conversation starters.
-
-With a controller, you can show, hide, reorder, and reset an entry in **Customize Entry**. The editor asks before you discard unsaved changes, and the ConsolePort cursor stays out of the way while the wheel is open.
-
-The minimap button and **Addon Compartment** entry open settings with a left-click outside combat. You can also type `/ep`.
-
-## Controls
-
-| Action | Controller | Mouse or keyboard |
+| Action | Controller | Mouse |
 | --- | --- | --- |
-| Select a slot | Either stick or D-pad up/down | Hover |
-| Change page | LB/RB or D-pad left/right | Scroll up for next or down for previous |
-| Use the selected entry | A / Cross | Left-click |
-| Add or remove a favorite | X / Square | Middle-click |
-| Customize an entry | Y / Triangle | Right-click |
-| Go back or close the wheel | B / Circle | Right-click the center |
-| Dismiss the wheel | Start/Menu | Esc |
+| Open or use | <img src="https://raw.githubusercontent.com/wiki/blazze11/EmotePanel/glyphs/xbox-a.png" alt="Xbox A" width="25" height="25"> <img src="https://raw.githubusercontent.com/wiki/blazze11/EmotePanel/glyphs/ps-cross.png" alt="PlayStation Cross" width="25" height="25"> | Left-click |
+| Favorite | <img src="https://raw.githubusercontent.com/wiki/blazze11/EmotePanel/glyphs/xbox-x.png" alt="Xbox X" width="25" height="25"> <img src="https://raw.githubusercontent.com/wiki/blazze11/EmotePanel/glyphs/ps-square.png" alt="PlayStation Square" width="25" height="25"> | Middle-click |
+| Edit | <img src="https://raw.githubusercontent.com/wiki/blazze11/EmotePanel/glyphs/xbox-y.png" alt="Xbox Y" width="25" height="25"> <img src="https://raw.githubusercontent.com/wiki/blazze11/EmotePanel/glyphs/ps-triangle.png" alt="PlayStation Triangle" width="25" height="25"> | Right-click |
+| Back | <img src="https://raw.githubusercontent.com/wiki/blazze11/EmotePanel/glyphs/xbox-b.png" alt="Xbox B" width="25" height="25"> <img src="https://raw.githubusercontent.com/wiki/blazze11/EmotePanel/glyphs/ps-circle.png" alt="PlayStation Circle" width="25" height="25"> | Right-click the center |
 
-See the [full guide](EmotePanel/README.md) for combat behavior, customization, and every slash command. See the [changelog](CHANGELOG.md) for release details.
+For **WoW: Forever 1.60.1**. ConsolePort is optional. Type `/ep help` or read the [Guide Book](https://github.com/blazze11/EmotePanel/wiki). See the [changelog](CHANGELOG.md) for updates.
 
-## AI assistance
-
-OpenAI Codex helped develop and document the Forever port. Automated checks use a simulated WoW UI. Live behavior also depends on the client and input setup.
+*Codex helped develop and document the Forever port.*
