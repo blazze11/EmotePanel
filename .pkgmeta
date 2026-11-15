@@ -6,6 +6,7 @@ move-folders:
   EmotePanel/EmotePanel: EmotePanel
 
 ignore:
+  - .previews
   - README.md
   - AGENTS.md
   - summary.md
