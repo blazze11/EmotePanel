@@ -43,11 +43,97 @@ function EmotePanel:SetWheelBinding(slot, key, pet)
             if previous then SetBindingClick(previous, INPUT_NAME, opener) end
         end
     end
-    if changed then SaveBindings(bindingSet) end
+    if changed then
+        SaveBindings(bindingSet)
+        -- An explicit edit takes ownership of the current profile's wheel keys.
+        EmotePanelSavedVars.profileBindingsPending = nil
+    end
     self.migratingWheelBinding = nil
     self:SyncCombatWheel(true)
     if changed then return true end
     return false, "WoW could not save that keybind."
+end
+-- Apply a profile as one transaction in the currently active WoW binding set.
+-- Capture slots for displaced actions as well as the two wheel actions.
+function Bindings.ApplyProfile(values)
+    local set = GetCurrentBindingSet()
+    if set ~= 1 and set ~= 2 then return nil, "Wait until WoW has loaded your keybindings." end
+    local snapshots, actions, desired = {}, {}, {}
+    local function Snapshot(action)
+        if action and action ~= "" and not snapshots[action] then
+            snapshots[action] = {GetBindingKey(action)}
+            actions[#actions + 1] = action
+        end
+    end
+    local used = {}
+    for _, action in ipairs({WHEEL_BINDING, PET_BINDING}) do
+        local keys = {GetBindingKey(action)}
+        local changed = false
+        for slot = 1, 2 do
+            local value = values[(action == PET_BINDING and "pet" or "main") .. slot]
+            if value ~= nil and value ~= (keys[slot] or "") then
+                keys[slot], changed = value, true
+            end
+        end
+        -- Slot one can be empty while slot two is requested. WoW compacts slots.
+        for slot = 1, math.max(2, #keys) do
+            local key = keys[slot]
+            if key and key ~= "" then
+                if used[key] then return nil, "The same key is assigned to more than one wheel slot." end
+                used[key] = true
+            end
+        end
+        if changed then
+            Snapshot(action)
+            desired[action] = keys
+            for slot = 1, math.max(2, #keys) do
+                local key = keys[slot]
+                if key and key ~= "" then Snapshot(GetBindingAction(key)) end
+            end
+        end
+    end
+    if not next(desired) then return true end
+    local function Editable() return not InCombatLockdown() and GetCurrentBindingSet() == set end
+    local function Clear(action)
+        for _, key in ipairs({GetBindingKey(action)}) do
+            if not Editable() or not SetBinding(key, nil) then return false end
+        end
+        return true
+    end
+    local function Apply()
+        for _, action in ipairs(actions) do if desired[action] and not Clear(action) then return false end end
+        for _, action in ipairs(actions) do
+            local keys = desired[action]
+            if keys then
+                for slot = 1, math.max(2, #keys) do
+                    local key = keys[slot]
+                    if key and key ~= "" then
+                        if not Editable() or (GetBindingAction(key) ~= "" and not SetBinding(key, nil))
+                            or not SetBindingClick(key, INPUT_NAME, action == PET_BINDING and "TogglePet" or "Toggle") then return false end
+                    end
+                end
+            end
+        end
+        if not Editable() then return false end
+        SaveBindings(set)
+        return true
+    end
+    EmotePanel.migratingWheelBinding = true
+    local ok, applied = pcall(Apply)
+    local restored = true
+    if not ok or not applied then
+        for _, action in ipairs(actions) do if not Clear(action) then restored = false end end
+        for _, action in ipairs(actions) do
+            for _, key in ipairs(snapshots[action]) do
+                if not Editable() or not SetBinding(key, action) then restored = false end
+            end
+        end
+    end
+    EmotePanel.migratingWheelBinding = nil
+    EmotePanel:SyncCombatWheel(true)
+    if not restored then return nil, "WoW could not restore all binding slots. Check your active binding set." end
+    if not ok or not applied then return nil, "WoW could not apply the profile keybinds." end
+    return true
 end
 local function GetLegacyWheelKeys()
     return { GetBindingKey(LEGACY_BINDING) }

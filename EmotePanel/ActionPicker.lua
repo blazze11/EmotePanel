@@ -124,10 +124,13 @@ function ActionPicker.Create(mainPanel)
         {"spell", "Abilities", "Choose learned spells for the Actions wheel."},
         {"item", "Items", "Choose carried or equipped items for the Actions wheel."},
         {"macro", "Macros", "Choose saved account or character macros for the Actions wheel."},
+        {"mount", "Mounts", "Add collected mounts. Use them outside combat."},
+        {"companion", "Companion Pets", "Add pets from your Pet Journal. Summon or dismiss them outside combat.", 115},
+        {"toy", "Toy Box", "Add collected toys shown by your current Toy Box filters."},
     }) do
-        local kind, label, tooltip = unpack(tab)
+        local kind, label, tooltip, width = unpack(tab)
         local button = Widgets.CreateRedButton(panel, label)
-        button:SetSize(96, 25)
+        button:SetSize(width or 76, 25)
         button:SetDisabledFontObject(GameFontDisable)
         Widgets.AddSettingsTooltip(button, label, tooltip)
         if index > 1 then button:SetPoint("LEFT", tabs[index - 1].button, "RIGHT", 6, 0) end
@@ -196,6 +199,9 @@ function ActionPicker.Create(mainPanel)
                 name = name .. "  ·  " .. choice.data.preview
             elseif self.kind == "item" and Entries.GetEntryData("macros", choice.key) and not Entries.IsActionItemCarried(choice.data.actionID) then
                 name = name .. "  ·  Not carried"
+            end
+            if choice.data.profileImported and not Entries.IsEntryAvailable(choice.data) then
+                name = name .. "  ·  Unavailable"
             end
             row.label:SetText(name:gsub("|", "||"))
             row:Show()

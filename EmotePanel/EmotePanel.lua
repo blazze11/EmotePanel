@@ -17,6 +17,13 @@ local Widgets = ns.Widgets
 local Entries = ns.Entries
 local Pages = ns.Pages
 local Wheel = ns.Wheel
+local collectionEvents = {
+    COMPANION_LEARNED = "mount",
+    COMPANION_UNLEARNED = "mount",
+    PET_JOURNAL_LIST_UPDATE = "companion",
+    TOYS_UPDATED = "toy",
+}
+local collectionsDirty
 local Input = ns.Input
 local CombatWheel = ns.CombatWheel
 local SettingsUI = ns.SettingsUI
@@ -33,6 +40,7 @@ function EmotePanel:Initialize()
     self.supportsPetWheel = not issecretvalue(class) and (class == "HUNTER" or class == "WARLOCK")
     Pages.Initialize()
     self:InitializeWheel()
+    ns.Profiles.InitializeWhenReady()
 end
 
 function EmotePanel_Toggle()
@@ -41,7 +49,7 @@ end
 
 local function UseLauncher(mouseButton)
     if mouseButton ~= "RightButton" and EmotePanel.settingsCategoryID then
-        SettingsUI.OpenSettings()
+        SettingsUI.ToggleSettings()
     end
 end
 
@@ -78,8 +86,11 @@ local function CreateMinimapButton()
         button:ClearAllPoints()
         button:SetPoint("CENTER", minimap, "CENTER", math.cos(angle) * radiusX, math.sin(angle) * radiusY)
     end
-    local angle = EmotePanelSavedVars.minimapAngle
-    SetPosition(type(angle) == "number" and angle or math.rad(225))
+    function EmotePanel:RefreshMinimapPosition()
+        local angle = EmotePanelSavedVars.minimapAngle
+        SetPosition(type(angle) == "number" and angle or math.rad(225))
+    end
+    EmotePanel:RefreshMinimapPosition()
 
     local function DragButton()
         local centerX, centerY = minimap:GetCenter()
@@ -105,7 +116,7 @@ local function CreateMinimapButton()
         if button:GetScript("OnUpdate") then return end
         GameTooltip:SetOwner(button, "ANCHOR_LEFT")
         GameTooltip:SetText("EmotePanel v" .. ns.version)
-        GameTooltip:AddLine("Left-click for settings.")
+        GameTooltip:AddLine("Left-click to open or close settings.")
         GameTooltip:AddLine("Use your Wheel Keybind to open the wheel. Drag to move.")
         GameTooltip:Show()
     end)
@@ -142,25 +153,33 @@ local function HandleSlashCommand(msg)
         Widgets.ShowError("Use the wheel keybind to close the combat wheel first.")
         return
     end
-    if InCombatLockdown() and (command == "" or command == "config" or command == "list" or command == "actions"
-        or command == "categories" or command == "help" or command == "scroll") then
+    if InCombatLockdown() and (command == "" or command == "config" or command == "setup" or command == "list" or command == "actions"
+        or command == "categories" or command == "profiles" or command == "help" or command == "scroll" or command == "new") then
         Widgets.ShowError("Settings are unavailable in combat.", LE_GAME_ERR_AFFECTING_COMBAT)
         return
     end
 
     if command == "help" or command == "scroll" then
         SettingsUI.OpenSettings("guide")
+    elseif command == "new" then
+        SettingsUI.OpenSettings("new")
     elseif command == "list" then
         SettingsUI.OpenSettings("help")
         if EmotePanel.settingsWindow:IsShown() then EmotePanelHelpPanel:SelectSection("favorites") end
-    elseif command == "" or command == "config" then
+    elseif command == "" then
+        SettingsUI.ToggleSettings()
+    elseif command == "config" then
         SettingsUI.OpenSettings()
+    elseif command == "setup" then
+        SettingsUI.OpenWheelBindingSetup()
     elseif command == "actions" then
         SettingsUI.OpenSettings("actions")
+    elseif command == "profiles" then
+        SettingsUI.OpenSettings("profiles")
     elseif command == "categories" then
         SettingsUI.OpenSettings("categories")
     elseif command == "reset" then
-        Widgets.ShowConfirmation("EMOTEPANEL_RESET_ALL")
+        SettingsUI.ConfirmResetToDefaults()
     else
         Widgets.ShowError("Unknown command. Open /ep help to see available commands.")
     end
@@ -188,9 +207,11 @@ local function InitializeAddon(eventFrame)
     eventFrame:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
     eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     eventFrame:RegisterEvent("UPDATE_MACROS")
+    for event in pairs(collectionEvents) do eventFrame:RegisterEvent(event) end
     eventFrame:RegisterEvent("SPELL_UPDATE_COOLDOWN")
     eventFrame:RegisterEvent("SPELL_UPDATE_CHARGES")
     eventFrame:RegisterEvent("SPELL_UPDATE_USES")
+    eventFrame:RegisterEvent("SPELL_UPDATE_USABLE")
     eventFrame:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_SHOW")
     eventFrame:RegisterEvent("SPELL_ACTIVATION_OVERLAY_GLOW_HIDE")
     for castEvent in pairs(Wheel.CAST_EVENTS) do eventFrame:RegisterUnitEvent(castEvent, "player") end
@@ -226,30 +247,42 @@ local function InitializeAddon(eventFrame)
     end
     if not InCombatLockdown() then EmotePanel:SetupGamepad() end
 
-    -- Print login message
-    print("|cFF00FF00EmotePanel|r loaded. Type |cFFFFFF00/ep help|r for commands and instructions.")
+    print(("|cFF00FF00EmotePanel v%s|r loaded. Type |cFFFFFF00/ep help|r for help or |cFFFFFF00/ep new|r for release notes."):format(ns.version))
 end
 
 -- Event handling
 local function OnEvent(self, event, ...)
     if event == "PLAYER_LOGOUT" then
-        SettingsUI.HandleLogout()
+        ns.Profiles.SaveActive()
     elseif event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
         CombatWheel.ReportRestriction(event, ...)
     elseif event == "PLAYER_REGEN_DISABLED" or event == "PLAYER_REGEN_ENABLED" then
         if event == "PLAYER_REGEN_DISABLED" then
             local confirmation = Widgets.GetConfirmation()
             if confirmation then StaticPopup_Hide(confirmation.which) end
-            EmotePanel.settingsWindow:Hide()
+            SettingsUI.SuspendForCombat()
         end
         Input.HandleCombatTransition(event)
-        if event == "PLAYER_REGEN_ENABLED" then Pages.HandleAutomaticActionsChanged() end
+        if event == "PLAYER_REGEN_ENABLED" then
+            if not ns.Profiles.ready then ns.Profiles.InitializeWhenReady() end
+            SettingsUI.CheckLoginBindingWarning()
+            if collectionsDirty then
+                collectionsDirty = nil
+                EmotePanel:RefreshCurrentEntryPages()
+            end
+            Pages.HandleAutomaticActionsChanged()
+            SettingsUI.RestoreAfterCombat()
+        end
     elseif event == "DISPLAY_SIZE_CHANGED" or event == "UI_SCALE_CHANGED" then
         if EmotePanelSavedVars.followCursorCenter then EmotePanel:LoadPosition() end
         local settings = EmotePanel.settingsWindow
         if settings:IsShown() then settings:FitToScreen() end
         Wheel.HandleDisplayChanged()
     elseif event == "UPDATE_BINDINGS" or event == "GAME_PAD_ACTIVE_CHANGED" then
+        if event == "UPDATE_BINDINGS" then
+            ns.Profiles.InitializeWhenReady()
+            SettingsUI.CheckLoginBindingWarning()
+        end
         EmotePanel:RefreshWheelFooter()
         EmotePanel:RefreshGamepadHint()
         EmotePanel:SyncCombatWheel(true)
@@ -274,7 +307,9 @@ local function OnEvent(self, event, ...)
         ActionPicker.Refresh("spell")
         SettingsUI.RefreshEntryList()
     elseif event == "SPELLS_CHANGED" then
+        Entries.ReadActions()
         ActionPicker.Refresh("spell")
+        EmotePanel:RefreshCurrentEntryPages()
         Pages.HandleAutomaticActionsChanged()
     elseif event == "QUEST_WATCH_LIST_CHANGED" or event == "QUEST_DATA_LOAD_RESULT" or event == "UNIT_QUEST_LOG_CHANGED"
         or event == "UPDATE_EXTRA_ACTIONBAR" or event == "ACTIONBAR_SLOT_CHANGED" or event == "ZONE_CHANGED_NEW_AREA" then
@@ -284,7 +319,9 @@ local function OnEvent(self, event, ...)
         or (event == "UNIT_PET" and ... == "player") or (event == "UNIT_FLAGS" and ... == "pet") then
         Pages.HandlePetActionsChanged()
     elseif event == "PET_BAR_UPDATE_USABLE" then
-        if EmotePanel.frame:IsShown() and Pages.currentPage.mode == "pet" then EmotePanel:RefreshActionRanges() end
+        if EmotePanel.frame:IsShown() and Pages.currentPage.mode == "pet" then EmotePanel:RefreshActionAvailability() end
+    elseif event == "SPELL_UPDATE_USABLE" then
+        if EmotePanel.frame:IsShown() then EmotePanel:RefreshActionAvailability() end
     elseif Wheel.CAST_EVENTS[event] then
         Wheel.HandleSpellcast(event, ...)
     elseif event == "SPELL_ACTIVATION_OVERLAY_GLOW_SHOW" or event == "SPELL_ACTIVATION_OVERLAY_GLOW_HIDE" then
@@ -300,9 +337,17 @@ local function OnEvent(self, event, ...)
                 end
                 EmotePanel:RefreshCombatAppearance()
                 EmotePanel:RefreshSelectedActionFeedback()
-                EmotePanel:RefreshActionRanges()
+                EmotePanel:RefreshActionAvailability()
                 EmotePanel:RefreshGamepadHint()
             end
+        end
+    elseif collectionEvents[event] then
+        if InCombatLockdown() or EmotePanel.combatView then
+            collectionsDirty = true
+        else
+            EmotePanel:RefreshCurrentEntryPages()
+            ActionPicker.Refresh(collectionEvents[event])
+            SettingsUI.RefreshEntryList()
         end
     elseif event == "UPDATE_MACROS" then
         Entries.HandleMacrosChanged()
@@ -316,10 +361,12 @@ local function OnEvent(self, event, ...)
             EmotePanel:RefreshWheel()
         end
         if event == "PLAYER_ENTERING_WORLD" then
+            if not ns.Profiles.ready then ns.Profiles.InitializeWhenReady() end
             Pages.HandleAutomaticActionsChanged()
             EmotePanel:SyncCombatWheel(true)
             local initialLogin, reloadingUI = ...
-            if initialLogin or reloadingUI then SettingsUI.ShowLoginWarnings() end
+            if initialLogin or reloadingUI then SettingsUI.ShowLoginWarnings()
+            else SettingsUI.CheckLoginBindingWarning() end
         end
     elseif event == "SKILL_LINES_CHANGED" then
         Pages.HandleProfessionsChanged()

@@ -332,7 +332,14 @@ local function ShowConfirmation(which, text, data)
 end
 
 local function CreateSettingsHighlight(control, mouseSelection)
-    local highlight = control:CreateTexture(nil, "BACKGROUND", nil, 2)
+    local highlight
+    if control.AttachTexture then
+        -- Blizzard menu compositors forbid CreateTexture and own attachments.
+        highlight = control:AttachTexture()
+        highlight:SetDrawLayer("BACKGROUND", 2)
+    else
+        highlight = control:CreateTexture(nil, "BACKGROUND", nil, 2)
+    end
     highlight:SetTexture("Interface\\QuestFrame\\UI-QuestTitleHighlight")
     highlight:SetDesaturated(true)
     if mouseSelection then

@@ -12,13 +12,22 @@ local INVENTORY_INDEX = 19 -- Saved slot in Commands.
 local OLD_REAGENT_BAG_INDEX = 20
 local CLEAR_MARK_ICON = "Interface\\RaidFrame\\ReadyCheck-NotReady"
 
-local function IsSecureWheelAction(data)
-    return data.actionType == "macro" or data.actionType == "spell" or data.actionType == "item"
-        or data.actionType == "pet" or data.actionType == "action"
+local function GetPingCommand()
+    local command = SLASH_PING1 or "/ping"
+    if C_Ping and IsSecureCmd(command) then return command end
 end
 
-local function RequiresOutOfCombat(data)
-    return data.secureClick ~= nil or IsSecureWheelAction(data)
+local function CanPing()
+    return GetPingCommand() ~= nil
+end
+
+local function IsSecureWheelAction(data)
+    return data.actionType == "macro" or data.actionType == "spell" or data.actionType == "item"
+        or data.actionType == "pet" or data.actionType == "action" or data.actionType == "toy"
+end
+
+local function NeedsSecureInput(data)
+    return data.secureClick ~= nil or data.actionType == "ping" or IsSecureWheelAction(data)
 end
 
 local function HasExtraAction()
@@ -413,7 +422,7 @@ PANEL_MODES.panels = {
         { name = "Friends", icon = "atlas:gamepad-radial-icon-social", open = function() ToggleFriendsFrame(FRIEND_TAB_FRIENDS) end },
         false, -- Retired Inventory slot. Keep World Map at its saved index.
         { name = "World Map", icon = "inv_misc_map02", open = function() ToggleWorldMap() end },
-        { name = "Game Menu", icon = "atlas:gamepad-radial-icon-gamemenu", open = function() GameMenuFrame_Show() end },
+        false, -- Retired Game Menu slot. Opening it here can taint Edit Mode.
         { name = "Reputation", icon = "INV_Misc_TabardPVP_01", open = function() ToggleCharacter("ReputationFrame") end },
         { name = "Currency", icon = "INV_Misc_Coin_01", open = function() CharacterFrame:ToggleTokenFrame() end },
         { name = "PvP", icon = "atlas:Crosshair_PVP_128", open = function() ToggleCharacter("PVPRankFrame") end },
@@ -429,7 +438,7 @@ PANEL_MODES.panels = {
 local defaultPanelOrder = {
     15, 5, 1, 3, 2, 7, 4, 17, -- World Map through Reputation
     6, 13, 19, 18, 9, 10, 22, 8, -- Guilds & Communities through Account Collections
-    12, 20, 11, 21, 16, -- Calendar through Game Menu
+    12, 20, 11, 21, -- Calendar through Cooldown Settings
 }
 -- Keep saved command IDs stable, including the old standalone markers.
 local LEAVE_GROUP_INDEX = 18
@@ -443,6 +452,18 @@ for _, index in ipairs(interactionOrder) do
     interactionIDs[index] = true
     if index ~= LEAVE_GROUP_INDEX then commands[index].unavailableReason = OtherPlayerTargetWarning end
 end
+local pings = {
+    { PING_TYPE_ATTACK or "Attack", "Attack" },
+    { PING_TYPE_WARNING or "Warning", "Warning" },
+    { PING_TYPE_ON_MY_WAY or "On My Way", "OnMyWay" },
+    { PING_TYPE_ASSIST or "Assist", "Assist" },
+    { PING_TYPE_NOT_THREAT or "Look", "NonThreat" },
+    { PING_TYPE_THREAT or "Threat", "Threat" },
+}
+for id, ping in ipairs(pings) do
+    pings[id] = { name = ping[1], icon = "atlas:Ping_Marker_Icon_" .. ping[2], actionType = "ping", actionID = id }
+end
+
 local targetMarkers = { [7] = commands[14], [8] = commands[13] }
 for marker, name in ipairs({"Star", "Circle", "Diamond", "Triangle", "Moon", "Square"}) do
     targetMarkers[marker] = {
@@ -488,6 +509,8 @@ local categoryEntries = {
     { category = "panels", name = "Game Panels", icon = "atlas:gamepad-radial-icon-character", actionType = "panel", outOfCombat = true },
     { category = "targetMarkers", name = "Target Marker", icon = "atlas:gamepad-radial-icon-targeting-up-c60", actionType = "submenu" },
     { category = "interactions", name = PANEL_MODES.interactions.title, icon = "atlas:gamepad-radial-icon-group-up-c60" },
+    { category = "pings", name = PING_SYSTEM_LABEL or "Ping System", icon = "atlas:Ping_Marker_Icon_OnMyWay",
+        actionType = "ping", available = CanPing, defaultHidden = true },
 }
 local categoryByID = {}
 for _, entry in ipairs(categoryEntries) do categoryByID[entry.category] = entry end
@@ -598,6 +621,7 @@ local function ReadProfessions()
 end
 
 local function GetEntryData(mode, index)
+    if mode == "pings" then return pings[index] end
     if mode == "targetMarkers" then return targetMarkers[index] end
     if mode == "categories" then return categoryByID[index] end
     if mode == "macros" then return automaticActions[index] or actionsByID[index] end
@@ -719,6 +743,15 @@ local function ReadActions()
     ReadScope(1, accountCount, "account:", "Account")
     if accountLimit and characterGUID then
         ReadScope(accountLimit + 1, characterCount, characterGUID .. ":", "Character")
+    end
+    for key, name in pairs(EmotePanelSavedVars.profileMissingMacros or {}) do
+        if not actionsByID[key] and (key:sub(1, 8) == "account:" or characterGUID and key:sub(1, #characterGUID + 1) == characterGUID .. ":") then
+            actionsByID[key] = {
+                name = name, icon = "INV_Misc_QuestionMark", preview = "Macro not found",
+                actionType = "unavailable", profileMacro = true, available = function() return false end,
+            }
+            table.insert(actionIDs, key)
+        end
     end
     for _, data in ipairs(EmotePanelSavedVars.directActions[characterGUID] or {}) do
         local key = GetDirectActionKey(data.actionType, data.actionID)
@@ -851,8 +884,33 @@ local function IsEntryHidden(mode, index)
     return mode == "categories" and categoryByID[index] and categoryByID[index].defaultHidden
 end
 
+local function GetCompanionID(id, species)
+    local currentSpecies = C_PetJournal.GetPetInfoByPetID(id)
+    if not issecretvalue(currentSpecies) and currentSpecies and currentSpecies > 0 then return id end
+    if not species then return end
+    for _, petID in ipairs(C_PetJournal.GetOwnedPetIDs()) do
+        local petSpecies = C_PetJournal.GetPetInfoByPetID(petID)
+        if not issecretvalue(petSpecies) and petSpecies == species then return petID end
+    end
+end
+
 local function IsEntryAvailable(data)
-    return data and (not data.available or data.available()) and (data.actionType ~= "item" or carriedActionItems[data.actionID])
+    if not data or (data.available and not data.available()) then return false end
+    local kind, id = data.actionType, data.actionID
+    if kind == "item" then return carriedActionItems[id] end
+    if kind == "spell" and data.profileImported then
+        local known = C_SpellBook.IsSpellKnown(id)
+        return not issecretvalue(known) and known == true
+    end
+    if kind == "toy" then return PlayerHasToy(id) end
+    if kind == "mount" then
+        local _, _, _, _, _, _, _, _, _, hidden, owned = C_MountJournal.GetMountInfoByID(id)
+        return not issecretvalue(owned) and not issecretvalue(hidden) and owned and not hidden
+    end
+    if kind == "companion" then
+        return GetCompanionID(id, data.profileSpecies) ~= nil
+    end
+    return true
 end
 
 local function IsEntryVisible(mode, index)
@@ -1033,6 +1091,7 @@ end
 
 local function GetEntryPreview(mode, index, data)
     if mode == "categories" then return "Open " .. data.name end
+    if mode == "pings" then return "" end
     if mode == "targetMarkers" or data.actionType == "submenu" then return data.preview end
     if mode == "macros" then return data.preview end
     if mode == "pet" then
@@ -1091,6 +1150,7 @@ end
 function EmotePanel:SetActionSelected(key, data, selected, keepPage)
     local saved = EmotePanelSavedVars
     if selected and not actionsByID[key] then
+        if not characterGUID then return end
         saved.directActions[characterGUID] = saved.directActions[characterGUID] or {}
         table.insert(saved.directActions[characterGUID], data)
         actionsByID[key] = data
@@ -1106,11 +1166,14 @@ function EmotePanel:SetActionSelected(key, data, selected, keepPage)
     if data and (data.actionType == "item" or data.actionType == "spell") then ActionPicker.Refresh(data.actionType) end
 end
 
+local directActionLabels = {spell = "Spell", item = "Item", mount = "Mount", companion = "Companion Pet", toy = "Toy"}
+
 local function GetDirectAction(kind, id, name, icon)
     if not characterGUID or issecretvalue(id) or not id or issecretvalue(name) or not name or issecretvalue(icon) then return end
     return GetDirectActionKey(kind, id), {
         actionType = kind, actionID = id, name = name, icon = icon or "INV_Misc_QuestionMark",
-        preview = kind == "spell" and "Spell" or "Item",
+        preview = directActionLabels[kind],
+        outOfCombat = kind == "mount" or kind == "companion" or nil,
     }
 end
 
@@ -1204,13 +1267,41 @@ local function GetActionChoices(kind)
                 Add(GetItemAction(C_Container.GetContainerItemInfo(bag, slot)))
             end
         end
+    elseif characterGUID and kind == "mount" then
+        for _, id in ipairs(C_MountJournal.GetMountIDs()) do
+            if not issecretvalue(id) then
+                local name, _, icon, _, _, _, _, _, _, hidden, owned = C_MountJournal.GetMountInfoByID(id)
+                if not issecretvalue(owned) and not issecretvalue(hidden) and owned and not hidden then
+                    Add(GetDirectAction(kind, id, name, icon))
+                end
+            end
+        end
+    elseif characterGUID and kind == "companion" then
+        for _, id in ipairs(C_PetJournal.GetOwnedPetIDs()) do
+            if not issecretvalue(id) then
+                local _, customName, _, _, _, _, _, name, icon = C_PetJournal.GetPetInfoByPetID(id)
+                if not issecretvalue(customName) and customName and customName ~= "" then name = customName end
+                Add(GetDirectAction(kind, id, name, icon))
+            end
+        end
+    elseif characterGUID and kind == "toy" then
+        for index = 1, C_ToyBox.GetNumFilteredToys() do
+            local id = C_ToyBox.GetToyFromIndex(index)
+            if not issecretvalue(id) and id and id > 0 and PlayerHasToy(id) then
+                local _, name, icon = C_ToyBox.GetToyInfo(id)
+                Add(GetDirectAction(kind, id, name, icon))
+            end
+        end
     end
 
-    -- Keep unavailable items visible only while selected, so players can uncheck them.
+    -- Keep selected actions manageable even when they leave their source list.
     for _, key in ipairs(actionIDs) do
         local data = actionsByID[key]
-        if not highestOnly and data and data.actionType == kind
-            and (kind ~= "item" or carriedActionItems[data.actionID] or not IsEntryHidden("macros", key)) then
+        local importedSelection = data and data.profileImported and not IsEntryHidden("macros", key)
+        if data and (data.actionType == kind or kind == "macro" and data.profileMacro)
+            and (not highestOnly or importedSelection)
+            and (kind == "macro" or kind == "spell" or not IsEntryHidden("macros", key)
+                or (kind == "item" and carriedActionItems[data.actionID])) then
             Add(key, data)
         end
     end
@@ -1419,12 +1510,14 @@ Entries.GetEntryPreview = GetEntryPreview
 Entries.GetOrderedEntryIDs = GetOrderedEntryIDs
 Entries.GetSlashCommand = GetSlashCommand
 Entries.GetRaidMarker = GetRaidMarker
+Entries.GetPingCommand = GetPingCommand
 Entries.IsPlayerInteraction = function(mode, index) return mode == "commands" and interactionIDs[index] end
 Entries.GetStorageMode = GetStorageMode
 Entries.GetUnavailableReason = GetUnavailableReason
 Entries.GetVisibleEntryIDs = GetVisibleEntryIDs
 Entries.HasEditableText = HasEditableText
 Entries.IsEntryAvailable = IsEntryAvailable
+Entries.GetCompanionID = GetCompanionID
 Entries.HasSummonedPet = HasSummonedPet
 Entries.IsEntryHidden = IsEntryHidden
 Entries.IsEntryVisible = IsEntryVisible
@@ -1447,13 +1540,14 @@ Entries.CanShowCategory = CanShowCategory
 Entries.categoryLimitMessage = "Hide a category first. The Category Wheel holds up to eight."
 Entries.SwapOrder = SwapOrder
 Entries.categoryByID = categoryByID
+Entries.SIT_INDEX = SIT_INDEX
 Entries.categoryEntries = categoryEntries
 Entries.customEntryTypes = customEntryTypes
 Entries.modeOrder = modeOrder
 Entries.voicedEmoteTitle = voicedEmoteTitle
 Entries.voicedEmoteTokens = voicedEmoteTokens
 Entries.IsSecureWheelAction = IsSecureWheelAction
-Entries.RequiresOutOfCombat = RequiresOutOfCombat
+Entries.NeedsSecureInput = NeedsSecureInput
 Entries.HasCharacter = HasCharacter
 Entries.GetFavorites = GetFavorites
 Entries.ToggleFavorite = ToggleFavorite

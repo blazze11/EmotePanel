@@ -17,6 +17,10 @@ local targetMarkerPage = {
     mode = "targetMarkers", title = "Target Marker", count = 8,
     entries = {8, 7, 6, 5, 4, 3, 2, 1},
 }
+local pingPage = {
+    mode = "pings", title = Entries.categoryByID.pings.name, count = 6,
+    entries = {1, 2, 3, 4, 5, 6},
+}
 local markerOrigin
 local professionPage = { mode = "professions", title = "Professions", count = 0, entries = {} }
 local grouped
@@ -88,6 +92,7 @@ local function BuildCategoryPages()
         AddPages(category, category == "voicedEmotes" and Entries.voicedEmoteTitle or Entries.PANEL_MODES[category].title)
     end
     table.insert(categoryPages, professionPage)
+    if Entries.GetPingCommand() then table.insert(categoryPages, pingPage) end
     AddPages("macros", ACTIONS_TITLE)
 end
 
@@ -197,7 +202,7 @@ local function GetPageNavigation(index, page)
         if index < last or not stop then nav.right = index % last + 1 end
     else
         local first, last = GetCategoryPageRange(page.category or page.mode)
-        nav.back = 0
+        if page.mode ~= "pings" then nav.back = 0 end
         if page.mode == "macros" then
             if index > first then nav.left = index - 1 end
             if index < last then nav.right = index + 1
@@ -252,7 +257,8 @@ local function GetSectorEntry(sector, page, forCombatLayout)
 end
 
 function EmotePanel:RememberAction(sector)
-    if not EmotePanelSavedVars.rememberLastAction or Pages.currentPage.mode == "targetMarkers" then return end
+    if not EmotePanelSavedVars.rememberLastAction or Pages.currentPage.mode == "targetMarkers"
+        or Pages.currentPage.mode == "pings" then return end
     local mode, key, data = GetSectorEntry(sector)
     if not data then return end
     local last = { pageMode = Pages.currentPage.mode, mode = mode, key = key }
@@ -289,9 +295,12 @@ function EmotePanel:DisplayPage(index, page, selection, navigation)
     self.canPageLeft = nav.left ~= nil
     self.canPageRight = nav.right ~= nil
     self.canGoBack = nav.back ~= nil
-    if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
+    if changedPage then self.wheelTooltip:Hide() end
     self:RefreshWheel(selection)
-    if changedPage then self:AnimateWheelPage(navigation) end
+    if changedPage then
+        self:AnimateWheelPage(navigation)
+        if self.frame:IsShown() then self:ShowWheelEntryTooltip(self.selected) end
+    end
 end
 
 function EmotePanel:ShowPage(index, selection, navigation)
@@ -353,6 +362,10 @@ function EmotePanel:ShowTargetMarkers()
 end
 
 function EmotePanel:BackOrClose()
+    if Pages.currentPage.mode == "pings" then
+        self.frame:Hide()
+        return
+    end
     if Pages.currentPage.mode == "targetMarkers" then
         if markerOrigin == "categories" then
             for sector, id in ipairs(Pages.categoryWheel.entries) do
@@ -470,7 +483,8 @@ function EmotePanel:GetRemovableWheelAction()
 end
 
 function EmotePanel:ToggleFavorite()
-    if Pages.currentPage == Pages.categoryWheel or Pages.currentPage.mode == "pet" or Pages.currentPage.mode == "targetMarkers" then return end
+    if Pages.currentPage == Pages.categoryWheel or Pages.currentPage.mode == "pet"
+        or Pages.currentPage.mode == "targetMarkers" or Pages.currentPage.mode == "pings" then return end
     local mode, slot, data = GetSectorEntry(self.selected)
     if not data or data.automatic then return end
     local previousPageCount = FavoritePageCount()

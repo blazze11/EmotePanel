@@ -38,8 +38,12 @@ local SELECTION_COLORS = {
     spell = { 0.39, 0.72, 1 },
     item = { 0.38, 0.95, 0.57 },
     macro = { 0.95, 0.53, 0.9 },
+    mount = { 0.95, 0.72, 0.4 },
+    companion = { 0.72, 0.66, 1 },
+    toy = { 0.55, 0.88, 0.88 },
     action = { 0.88, 0.9, 0.38 },
     panel = { 0.42, 0.95, 0.83 },
+    ping = { 0.4, 0.82, 1 },
     profession = { 1, 0.61, 0.32 },
     pet = { 0.9, 0.55, 1 },
 }
@@ -77,6 +81,8 @@ function EmotePanel:CreateMainFrame()
     display:SetAlpha(0)
     display:Hide()
     self.wheelDisplay = display
+    self.wheelTooltip = CreateFrame("GameTooltip", AddonName .. "WheelTooltip", UIParent, "GameTooltipTemplate")
+    self.wheelTooltip.supportsItemComparison = false
 
     return frame
 end
@@ -147,6 +153,7 @@ end
 
 local WHEEL_STATUS_COLORS = {
     warning = { 1, 0.55, 0.51 },
+    power = { 0.62, 0.68, 1 },
     cooldown = { 1, 0.77, 0.45 },
     active = { 0.75, 0.92, 0.55 },
     normal = { 1, 1, 1 },
@@ -164,8 +171,9 @@ local function GetWheelEntryPreview(mode, key, data, slot)
     if not Entries.IsSecureWheelAction(data) then return Entries.GetEntryPreview(mode, key, data) end
     if data.movePending then return "Choose a destination" end
     if slot.outOfRange then return "Out of range", WHEEL_STATUS_COLORS.warning end
+    if slot.usability == "power" then return "Not enough resources", WHEEL_STATUS_COLORS.power end
     if slot.actionOnCooldown then return "On cooldown", WHEEL_STATUS_COLORS.cooldown end
-    if slot.petUnusable then return "Currently unavailable", WHEEL_STATUS_COLORS.warning end
+    if slot.usability == "unavailable" then return "Currently unavailable", WHEEL_STATUS_COLORS.warning end
     if mode == "pet" and data.active then
         local color = WHEEL_STATUS_COLORS.active
         if data.attacking then return "Attacking", color end
@@ -417,50 +425,57 @@ function EmotePanel:CreateWheel()
     self:SetupWheelMouse(wheel, 75 * scale, 234 * scale)
 end
 
+local function AnchorWheelTooltip(self)
+    local tooltip = self.wheelTooltip
+    tooltip:SetOwner(self.wheel, "ANCHOR_NONE")
+    tooltip:ClearAllPoints()
+    tooltip:SetPoint("BOTTOM", self.wheelDisplay, "TOP", 0, 8)
+end
+
 function EmotePanel:SetClearMarkHovered(hovered)
     self.clearMarkIcon.border:SetAtlas(hovered and SELECTED_ICON_BORDER or ICON_BORDER)
     if not hovered or EmotePanelSavedVars.showWheelTooltips ~= true then return end
-    if self.wheelTooltipFromMouse and not self.wheelTooltipSector and GameTooltip:IsOwned(self.wheel)
-        and GameTooltip:IsShown() then return end
+    local tooltip = self.wheelTooltip
+    if self.wheelTooltipFromMouse and not self.wheelTooltipSector and tooltip:IsShown() then return end
     self.wheelTooltipSector, self.wheelTooltipFromMouse = nil, true
-    GameTooltip:SetOwner(self.wheel, "ANCHOR_CURSOR_RIGHT")
-    GameTooltip:SetText("Clear Mark")
-    GameTooltip:Show()
+    AnchorWheelTooltip(self)
+    tooltip:SetText("Clear Mark")
+    tooltip:Show()
 end
 
 function EmotePanel:ShowWheelEntryTooltip(sector, fromMouse)
-    local owned = GameTooltip:IsOwned(self.wheel)
+    local tooltip = self.wheelTooltip
+    local shown = tooltip:IsShown()
     if EmotePanelSavedVars.showWheelTooltips ~= true then
-        if owned then GameTooltip:Hide() end
+        if shown then tooltip:Hide() end
         return
     end
     local mode, key, data = Pages.GetSectorEntry(sector)
     if not data or IsCombatItemMissing(data) or (not fromMouse and not Entries.IsSecureWheelAction(data)) then
-        if owned and (not fromMouse or self.wheelTooltipFromMouse) then GameTooltip:Hide() end
+        if shown and (not fromMouse or self.wheelTooltipFromMouse) then tooltip:Hide() end
         return
     end
-    if owned and GameTooltip:IsShown() and self.wheelTooltipSector == sector
+    if shown and self.wheelTooltipSector == sector
         and self.wheelTooltipFromMouse == fromMouse then return end
 
     self.wheelTooltipSector, self.wheelTooltipFromMouse = sector, fromMouse
-    local anchor = fromMouse and "ANCHOR_CURSOR_RIGHT" or "ANCHOR_RIGHT"
-    GameTooltip:SetOwner(self.wheel, anchor)
+    AnchorWheelTooltip(self)
     local kind, native = data.actionType
     if kind == "spell" then
-        native = GameTooltip:SetSpellByID(data.actionID, false, true)
-    elseif kind == "item" then
-        native = GameTooltip:SetItemByID(data.actionID)
+        native = tooltip:SetSpellByID(data.actionID, false, true)
+    elseif kind == "item" or kind == "toy" then
+        native = tooltip:SetItemByID(data.actionID)
     elseif kind == "pet" then
-        native = GameTooltip:SetPetAction(data.actionID)
+        native = tooltip:SetPetAction(data.actionID)
     end
     if not native then
-        if native == false then GameTooltip:SetOwner(self.wheel, anchor) end
-        GameTooltip:SetText(Entries.GetInviteLabel(mode, key, data) or Entries.GetEntryName(mode, key, data))
+        if native == false then AnchorWheelTooltip(self) end
+        tooltip:SetText(Entries.GetInviteLabel(mode, key, data) or Entries.GetEntryName(mode, key, data))
     end
     if not native or kind == "pet" then
         local preview = (kind == "pet" or data.unavailableReason) and GetWheelEntryPreview(mode, key, data, self.slots[sector])
         preview = preview and preview ~= "" and preview or Entries.GetEntryPreview(mode, key, data)
-        if preview ~= "" then GameTooltip:AddLine(preview:gsub("|", "||"), 1, 1, 1, true) end
+        if preview ~= "" then tooltip:AddLine(preview:gsub("|", "||"), 1, 1, 1, true) end
     end
     if kind == "macro" then
         local body
@@ -472,25 +487,27 @@ function EmotePanel:ShowWheelEntryTooltip(sector, fromMouse)
             if not issecretvalue(name) and name == data.name then body = text end
         end
         if not issecretvalue(body) and type(body) == "string" and body ~= "" then
-            GameTooltip:AddLine((body:gsub("|", "||")), 1, 1, 1, true)
+            tooltip:AddLine((body:gsub("|", "||")), 1, 1, 1, true)
         end
     end
     if fromMouse and not self.combatView then
         if mode == "pet" then
             if not InCombatLockdown() and CombatWheel.GetPetAutocastMacro(data) then
-                GameTooltip:AddLine("Right-click to toggle autocast", 0.7, 0.7, 0.7)
+                tooltip:AddLine("Right-click to toggle autocast", 0.7, 0.7, 0.7)
             end
+        elseif mode == "pings" then
+            tooltip:AddLine("Left-click: Target. Middle-click: Self.", 0.7, 0.7, 0.7, true)
         elseif mode ~= "targetMarkers" and not data.automatic then
             if Pages.currentPage ~= Pages.categoryWheel or not InCombatLockdown() then
-                GameTooltip:AddLine("Right-click to edit", 0.7, 0.7, 0.7)
+                tooltip:AddLine("Right-click to edit", 0.7, 0.7, 0.7)
             end
             if Pages.currentPage ~= Pages.categoryWheel then
                 local hint = Entries.FindFavorite(mode, key) and "Middle-click to remove favorite" or "Middle-click to favorite"
-                GameTooltip:AddLine(hint, 0.7, 0.7, 0.7)
+                tooltip:AddLine(hint, 0.7, 0.7, 0.7)
             end
         end
     end
-    GameTooltip:Show()
+    tooltip:Show()
 end
 
 function EmotePanel:SetWheelPressed(index, input)
@@ -517,7 +534,7 @@ local function GetActionItemOrSpell(data)
         return data.actionID
     elseif data.actionType == "spell" then
         return nil, data.actionID
-    elseif data.actionType == "action" or data.actionType == "pet" then
+    elseif data.actionType ~= "macro" then
         return
     end
     local _, item = GetMacroItem(data.macroIndex)
@@ -558,6 +575,11 @@ local function UpdateActionCooldown(slot, data, item, spellID)
         return SetDuration(cooldown, actionDuration) and actionDuration:IsActive()
     elseif item then
         start, duration, enabled = C_Item.GetItemCooldown(item)
+    elseif data.actionType == "toy" then
+        local info = C_Spell.GetItemCooldown(data.actionID)
+        if not issecretvalue(info) and info then
+            start, duration, enabled = info.startTime, info.duration, info.isEnabled
+        end
     elseif spellID then
         -- Pass the duration objects through without reading restricted cooldown times.
         SetDuration(swipe, C_Spell.GetSpellCooldownDuration(spellID, false))
@@ -727,13 +749,12 @@ function EmotePanel:RefreshSpellFeedback(interrupted)
     end
 end
 
-local function GetActionInRange(data)
+local function GetActionInRange(data, item, spellID)
     if data.actionType == "pet" then
         local checksRange, inRange = select(8, GetPetActionInfo(data.actionID))
         if not issecretvalue(checksRange) and checksRange then return inRange end
         return
     end
-    local item, spellID = GetActionItemOrSpell(data)
     if item then
         local checksRange = C_Item.ItemHasRange(item)
         if not issecretvalue(checksRange) and checksRange then
@@ -744,24 +765,43 @@ local function GetActionInRange(data)
     end
 end
 
-function EmotePanel:RefreshActionRanges()
+local function GetActionUsability(data, spellID)
+    local usable, insufficientPower
+    if data.actionType == "pet" then
+        usable = GetPetActionSlotUsable(data.actionID)
+    elseif spellID then
+        usable, insufficientPower = C_Spell.IsSpellUsable(spellID)
+    end
+    if not issecretvalue(usable) and usable == false then
+        if not issecretvalue(insufficientPower) and insufficientPower then return "power" end
+        return "unavailable"
+    end
+end
+
+function EmotePanel:RefreshActionAvailability()
     local shown = self.frame:IsShown()
     local hasTarget = shown and UnitExists("target")
     local canCheck = not issecretvalue(hasTarget) and hasTarget
     for index, slot in ipairs(self.slots) do
         local data = shown and not slot.combatBlocked and select(3, Pages.GetSectorEntry(index))
-        local inRange
-        if canCheck and data and Entries.IsSecureWheelAction(data) then inRange = GetActionInRange(data) end
+        local inRange, usability
+        if data and Entries.IsSecureWheelAction(data) then
+            local item, spellID = GetActionItemOrSpell(data)
+            if canCheck then inRange = GetActionInRange(data, item, spellID) end
+            usability = GetActionUsability(data, spellID)
+        end
         local outOfRange = not issecretvalue(inRange) and inRange == false
-        local usable
-        if data and data.actionType == "pet" then usable = GetPetActionSlotUsable(data.actionID) end
-        local petUnusable = not issecretvalue(usable) and usable == false
-        if outOfRange ~= slot.outOfRange or petUnusable ~= slot.petUnusable then
+        if outOfRange ~= slot.outOfRange or usability ~= slot.usability then
             slot.outOfRange = outOfRange
-            slot.petUnusable = petUnusable
-            local brightness = petUnusable and 0.55 or 1
-            local greenAndBlue = outOfRange and 0.3 * brightness or brightness
-            slot.icon:SetVertexColor(brightness, greenAndBlue, greenAndBlue)
+            slot.usability = usability
+            local brightness = usability == "unavailable" and 0.55 or 1
+            if outOfRange then
+                slot.icon:SetVertexColor(brightness, 0.3 * brightness, 0.3 * brightness)
+            elseif usability == "power" then
+                slot.icon:SetVertexColor(0.5, 0.5, 1)
+            else
+                slot.icon:SetVertexColor(brightness, brightness, brightness)
+            end
         end
     end
     self:RefreshSelectedActionFeedback()
@@ -832,7 +872,7 @@ function EmotePanel:RefreshWheel(selection)
     self.selected = nil
     self:RefreshCombatAppearance()
     self:RefreshActionCooldowns()
-    self:RefreshActionRanges()
+    self:RefreshActionAvailability()
     self:RefreshSpellFeedback()
     local hasEntries = Pages.currentPage.count > 0
     if hasEntries then
@@ -860,7 +900,7 @@ function EmotePanel:RefreshWheel(selection)
     end
     self:UpdateSecureWheelInput()
     self:SyncCombatWheel()
-    if GameTooltip:IsOwned(self.wheel) and GameTooltip:IsShown() then
+    if self.wheelTooltip:IsShown() then
         local sector = self.wheelTooltipFromMouse and self.wheelTooltipSector or self.selected
         self.wheelTooltipSector = nil
         self:ShowWheelEntryTooltip(sector, self.wheelTooltipFromMouse)
@@ -1020,7 +1060,10 @@ function EmotePanel:RefreshGamepadHint()
     self.navigationHint:SetText(navigation)
     local mode, slot, data = Pages.GetSectorEntry(self.selected)
     local actions
-    if Pages.currentPage.mode == "categories" then
+    if Pages.currentPage.mode == "pings" then
+        actions = Widgets.GamepadGlyph("PAD1", "A") .. " Target    "
+            .. Widgets.GamepadGlyph("PAD4", "Y") .. " Self    "
+    elseif Pages.currentPage.mode == "categories" then
         actions = data and (IsCombatBlocked(mode, slot, data) and "Unavailable in combat    "
             or Widgets.GamepadGlyph("PAD1", "A") .. " Open    ") or ""
         if data and not self.combatView and not InCombatLockdown() then
@@ -1179,6 +1222,10 @@ local function SetupWheelFade(self)
     end
     local function FadeTo(target, duration)
         if target == 1 then display:Show() end
+        if target == 0 and GameMenuFrame and GameMenuFrame:IsShown() then
+            alpha = 0
+            display:SetAlpha(0)
+        end
         if alpha == target then
             FinishFade()
             return
@@ -1202,6 +1249,13 @@ local function SetupWheelFade(self)
         PlayWheelSound(SOUNDKIT.GAMEPAD_RADIAL_MENU_CLOSE)
         FadeTo(0, FADE_OUT_DURATION)
     end)
+    if GameMenuFrame then
+        GameMenuFrame:HookScript("OnShow", function()
+            if self.combatView then return end
+            self.frame:Hide()
+            FadeTo(0, FADE_OUT_DURATION)
+        end)
+    end
 end
 
 local function DrawPageTransition(self, progress)
@@ -1259,7 +1313,7 @@ function EmotePanel:InitializeWheel()
                 local _, _, data = Pages.GetSectorEntry(self.selected)
                 if data and data.interactDistance then self:RefreshGamepadHint() end
             end
-            self:RefreshActionRanges()
+            self:RefreshActionAvailability()
         end
     end)
     self.frame:HookScript("OnHide", function()
@@ -1270,7 +1324,7 @@ function EmotePanel:InitializeWheel()
         end
         self:AnimateWheelPage()
         self:StopWheelMouseTooltip()
-        if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
+        self.wheelTooltip:Hide()
         self:SetWheelMovementCapture(false)
         self:SetWheelPressed(nil)
         for _, slot in ipairs(self.slots) do SetPetAttackPulse(slot.petStatus, false) end

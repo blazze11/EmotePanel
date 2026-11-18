@@ -1,5 +1,19 @@
 # EmotePanel changelog
 
+## 0.25.0 for WoW: Forever
+
+- **In-game changelog.** The load message shows the addon version. Type `/ep new` or select **New** in Settings to see release highlights.
+- **Full profile reset.** `/ep reset` opens the Reset to Defaults confirmation and opens General after the reset.
+- **Keybind setup.** Choose **Wheel Keybinds** in **Help → Start Here** to open the binding controls. Use `/ep setup` to assign the primary wheel key directly. A red chat message points to it when no main wheel key is set.
+- **Settings after combat.** If combat closes Settings, it reopens on the same tab afterward.
+- **Settings title bar.** Shows the addon version and updates when the active profile changes.
+- **Profile fixes.** Existing characters keep their legacy actions and settings. Profile switches review conflicting WoW keys. Selective sharing respects unchecked custom-entry fields, and profiles remember minimap placement.
+- **Profiles.** Automatic character profiles use your full name and preserve existing setups on upgrade. Switch between setups that save automatically, or duplicate one with Save As. Default stays a clean fresh-install preset. Import/export offers nested checkboxes, partial imports use defaults, and unavailable actions stay saved. Added profile guides and automatic Help continuation pages. Reset to Defaults affects only the active profile.
+- **Edit Mode.** Open Game Menu with WoW's keybind. Removed the wheel shortcut to avoid passing addon taint into Edit Mode.
+- **Spell availability.** The Actions Wheel shows when a spell needs more mana or another resource.
+- **Collections in Actions.** Add collected mounts, companion pets, and toys to the wheel.
+- **Ping System.** Enable this category to send Attack, Warning, On My Way, Assist, Look, or Threat. Use A/Cross for your target, Y/Triangle for yourself, and B/Circle to close.
+
 ## 0.24.0 for WoW: Forever
 
 - **Settings and Help.** A WoW Social-style settings window adds side tabs, controller shortcuts, reset confirmations, and a five-second keybind dialog. Confirmation dialogs respect the ConsolePort cursor. `/ep help` opens a nine-page guide. Open settings with `/ep` or by left-clicking the minimap or Addon Compartment shortcut. Open either wheel with its assigned keybind. Wheel position can follow WoW’s vertical cursor center and does by default on fresh installs.

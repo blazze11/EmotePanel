@@ -1,8 +1,10 @@
-# EmotePanel 0.24.0 (development)
+# EmotePanel 0.25.0 (development)
 
-For WoW: Forever 1.60.1 (interface 16001). Assign a **Wheel Keybind** in
-**Controller Setup** at the top of `/ep config`. Hunters and Warlocks can
-also assign a **Pet Keybind** there. Use the assigned keybind to open either
+For WoW: Forever 1.60.1 (interface 16001). Type `/ep setup` outside combat and
+press a key or controller button to assign your primary **Wheel Keybind**.
+Choose **Wheel Keybinds** in **Help → Start Here** to open **Controller Setup**
+in General. It also has a secondary key and, on a Hunter or Warlock,
+**Pet Keybinds**. Use the assigned keybind to open either
 wheel. Existing legacy assignments move to the secure binding
 the next time the addon loads outside combat.
 
@@ -36,9 +38,10 @@ Categories. **Reset Wheel Behavior** restores the stop options along with the
 other wheel behavior defaults.
 
 Left-click the minimap button or the **EmotePanel** entry in the **Addon
-Compartment** to open settings.
-Drag the minimap button to move it around the map. The version appears
-in the minimap tooltip and at the top of EmotePanel Options.
+Compartment** to open or close settings.
+Drag the minimap button to move it around the map. The Settings title bar
+shows the addon version and active profile. The minimap tooltip also shows
+the version.
 
 **Automatic quest items and abilities** is on by default. It adds tracked quest
 items, temporary zone abilities, and the Extra Action Button to the front of
@@ -57,7 +60,8 @@ additions and removals after combat.
 - **A/Cross** opens a category or uses the highlighted action. **B/Circle**
   or right-clicking the center goes back from a category or closes the wheel.
 - **Start/Menu** and controller buttons bound to **Game Menu** dismiss
-  the wheel. **Esc** uses WoW's normal window closing order.
+  the wheel. **Esc** uses WoW's normal window closing order. Opening the Game Menu
+  closes either wheel and blocks it from reopening while the menu is visible.
 - **Y/Triangle** or right-click opens the editor for an action. Choose an
   icon from the wheel set or WoW's spell and item icon library, then save.
 - **X/Square** or middle-click adds or removes the highlighted entry from
@@ -108,14 +112,22 @@ category when all eight slots are filled, uncheck another category first.
 If you have a custom Commands order, **Reset Order** in
 **Entries → Commands** restores the new default.
 
+Enable **Ping System** in Categories or page to it in the Favorites-first
+layout. Highlight Attack, Warning, On My Way, Assist, Look, or Threat.
+Press **A/Cross** or left-click to ping your current target. Press **Y/Triangle**
+or middle-click to ping yourself. **B/Circle** or right-clicking the center
+closes the wheel.
+Use the assigned wheel keybind in combat.
+
 For controller use, check **Enable WoW controller input** under
 **Controller Setup** in `/ep config`. This changes WoW's game-wide
 `GamePadEnable` setting. Turn off **Enable Gamepad UI** under
 **Options → Gameplay → Gamepad** because EmotePanel does not support
 **Gamepad (Beta)**. ConsolePort is optional.
-At login or UI reload, EmotePanel shows an on-screen warning if the wheel keybind is unassigned,
-Gamepad (Beta) is on, or a wheel has a controller binding and
-`GamePadEnable` is off. The reminder in **Controller Setup** updates
+If the main wheel has no keybind after login, reload, a profile switch, or a
+profile reset, EmotePanel prints a red chat message pointing to `/ep setup`.
+At login or UI reload, the on-screen controller warnings cover Gamepad (Beta)
+and controller bindings with `GamePadEnable` off. The **Controller Setup** reminder updates
 when either controller setting changes.
 Blocked actions and command errors use WoW's red on-screen error text.
 When a matching WoW error has a sound or voice cue, the native error
@@ -188,8 +200,8 @@ favorite status, and customization.
 Empty categories are skipped, and Professions still reports when it has
 no visible entries.
 
-**Actions** holds spells, items, and saved macros. Open `/ep actions` or use
-**Choose Actions** below the section dropdown in Entries. Click **Abilities**, **Items**, or **Macros**,
+**Actions** holds spells, items, saved macros, mounts, companion pets, and toys. Open `/ep actions` or use
+**Choose Actions** below the section dropdown in Entries. Click a source tab
 or use **D-pad left/right** from anywhere on the Actions tab to switch sources.
 Under **Abilities**, **Highest learned rank only** is on by default.
 Uncheck it to see lower ranks.
@@ -198,6 +210,11 @@ Select a row to add it. Select a checked row again to remove it from
 the wheel and from the Actions section in Entries. Spell and item
 selections are saved for the current character. Call Pet follows the current
 pet icon after a stable swap unless you chose a custom icon.
+
+**Mounts** and **Companion Pets** list collected entries and work outside combat.
+Use a companion pet again to dismiss it. **Toy Box** lists your collected toys
+under the current in-game Toy Box filters. Selected toys stay on the wheel when you
+change those filters. To use a toy in combat, open the wheel with its assigned keybind.
 
 With ConsolePort installed, open **Options** on a usable bag item or an
 active spell in the spellbook. Choose **Add to EmotePanel Actions** or
@@ -259,7 +276,9 @@ the same scope are skipped.
 
 Enable **Show wheel tooltips** on the **Customization** tab in `/ep config`
 to see details on mouse hover or when selecting spells, items, macros,
-and pet actions with a stick or the D-pad. Wheel tooltips are off by default.
+and pet actions with a stick or the D-pad. A preselected spell, item, or macro
+also shows its tooltip when you page to Actions. Tooltips are centered above the
+wheel's page title. Item actions show a single tooltip. Wheel tooltips are off by default.
 Spells, items, and pet actions use WoW's tooltip. Macros show their
 scope and command text, including the version loaded before combat.
 
@@ -267,6 +286,8 @@ scope and command text, including the version loaded before combat.
 circular swipe over the icon. The spell global cooldown animates with the
 swipe alone. Individual cooldowns also turn icons gray. Icons are tinted
 red when WoW reports the current target is too close or too far away.
+Spell icons turn blue when you lack mana or another resource and dim when WoW
+reports the spell is otherwise unavailable.
 Below the entry name, range and availability warnings use soft red, cooldowns
 use amber, and active pet commands and stances use green. The line is
 blank when there is no status to show.
@@ -320,10 +341,10 @@ restores the opening, action, and navigation options on its tab.
 Reset buttons ask for confirmation. Press **B/Circle** to cancel or click
 either labeled button. **A/Cross** activates the highlighted button when
 the ConsolePort cursor is active and confirms when it is inactive.
-Use **Reset to Defaults** in General to clear all saved EmotePanel settings,
-custom entries and overrides, Favorites, and Action selections for every
-character on the account. Confirm outside combat to reload the UI with the
-defaults. WoW keybinds stay assigned.
+Use `/ep reset` or **Reset to Defaults** in General to restore addon defaults
+in the active profile, including its custom entries, Favorites, and Actions.
+Confirm outside combat. General opens after the reset. Other profiles and
+WoW keybinds are kept.
 
 Under **Customization**, **Display and feedback** groups the keybind legend,
 cooldown numbers, tooltips, and wheel sounds. When **Show keybind legend**
@@ -386,7 +407,9 @@ in the default layout. The three default pages contain:
 
 1. World Map, Quest Log, Character Info, Talents, Spellbook, Group Finder, Legacy, and Reputation.
 2. Guilds & Communities, Friends, PvP, Currency, Mounts, Companion Pets, Appearances, and Account Collections.
-3. Calendar, Pet Spellbook (Hunters and Warlocks), Toys, Cooldown Settings, and Game Menu.
+3. Calendar, Pet Spellbook (Hunters and Warlocks), Toys, and Cooldown Settings.
+
+Open WoW's Game Menu and Edit Mode with your Game Menu keybind.
 
 Pet Spellbook dims until you summon a pet. The Pet Wheel opens with a
 living summoned pet and closes if that pet dies or is dismissed, including
@@ -476,27 +499,78 @@ switch sources. Use A/Cross to choose. Press **R3** or click **Default** and
 confirm to restore the stock icon when you save. Say, Party, and Command entries also support editing their
 name and text.
 
+## Profiles
+
+Open **Profiles** in Settings or type `/ep profiles`. Changes save automatically
+to the active profile shown in the title bar. Each character remembers its
+selection. Characters using the same profile share their changes. On first login, a profile
+named **Firstname Lastname** is created automatically. New characters get fresh
+addon settings while keeping assigned WoW keybinds. Upgrades from versions without
+profiles copy the current setup into the character profile.
+
+**Default** is the clean fresh-install preset and cannot be deleted or overwritten.
+Editing it saves a new character copy instead. Existing profile names and explicit
+named-profile selections are preserved on upgrade; names that collide receive a
+numbered suffix. Character ownership uses GUIDs, including names with surnames.
+
+Choose **Save As**, enter a new name, and confirm to duplicate your current setup.
+The copy becomes active. Changes to it leave the original profile unchanged.
+Use the dropdown to switch. On a controller, Confirm opens the list, up/down moves
+through it, Confirm selects, and Back closes it without switching. If a wheel key
+belongs to another WoW action, review the listed key and action before confirming.
+At login, a conflict leaves your WoW bindings in place while other profile settings
+load. Select the active profile again to review pending keys. Editing a wheel key
+in General adopts your current wheel bindings. Each profile saves the minimap
+button position along with the wheel position.
+
+**Export:** choose what to include using the nested checkboxes, then Continue.
+Choose **Select text** and press Ctrl+C to copy the export.
+
+**Import:** paste the export, Continue, and review the nested checkboxes. Everything
+starts checked. Continue again, enter a new profile name, and confirm **Create Profile**.
+The new profile becomes active. Unchecked fields use addon defaults. Creating a new
+custom entry requires both its name and message or command; an omitted icon uses
+the default icon. Leaving all definition fields unchecked skips the custom entry
+and its dependent order, visibility, override, and Favorite references in a new
+profile. Exported references contain only the checked definition fields.
+Existing profile names cannot be overwritten.
+
+Unavailable actions remain saved and appear when learned, carried, or collected.
+Missing macros resolve when a macro with the same name exists in the matching scope.
+Importing shared actions maps them to the current character.
+
+**Delete Profile** asks for confirmation and switches its characters to Default.
+Use **Reset to Defaults** or `/ep reset` to reset the active profile while
+keeping other profiles and your WoW keybinds. Both actions are available outside combat.
+
 ## Slash commands
 
 | Command | What it does |
 | --- | --- |
-| `/ep`, `/emotepanel` | Open EmotePanel settings. |
-| `/ep config` | Open EmotePanel settings. |
+| `/ep`, `/emotepanel` | Open or close EmotePanel settings. |
+| `/ep config` | Open settings on the General tab. |
+| `/ep setup` | Open the primary wheel keybind dialog outside combat. |
 | `/ep list` | Reorder Favorites and manage wheel entries. |
-| `/ep actions` | Choose spells, items, and saved macros for the Actions wheel. |
+| `/ep actions` | Choose entries for the Actions wheel. |
+| `/ep profiles` | Switch profiles, review pending wheel keys, Save As, delete, import, or export. |
 | `/ep categories` | Customize and reorder Category Wheel shortcuts. |
-| `/ep reset` | Ask to reset custom icons, names, and text. |
+| `/ep reset` | Confirm a full reset of the active profile to addon defaults, then open General. |
 | `/ep debug` | Show combat debug status. |
 | `/ep debug on`, `/ep debug off` | Turn combat logging on or off for this session. |
 | `/ep scroll` | Open the Help guide. |
 | `/ep help` | Open the Help tab in EmotePanel settings. |
+| `/ep new` | Open the in-game changelog. |
 
 The first Settings tab is **Help**. It starts with **Start Here**, followed
-by two category overviews with example entries, five step-by-step lessons,
-and a slash command reference. Gamepad and mouse controls have their own rows, and
+by category overviews, short step-by-step chapters, profile instructions, and a
+slash command reference. Longer chapters continue on extra pages to keep text
+above the page buttons. Gamepad and mouse controls have their own rows, and
 slash commands are blue. Click **Previous Page** or **Next Page**, or press
 **Y/Triangle** to go back a page and **X/Square** to go forward.
-Settings and Help open outside combat. Debugging is available during combat.
+Select **New** in Settings or type `/ep new` to read the in-game changelog.
+It opens at the latest release. Use the same page controls to browse older versions.
+Settings and Help open outside combat. If combat closes Settings, it reopens
+on the same tab when combat ends. Debugging is available during combat.
 Reload the UI after installing.
 
 ## Source layout

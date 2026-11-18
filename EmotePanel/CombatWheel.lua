@@ -61,6 +61,8 @@ function EmotePanel:BuildCombatLayout()
                 value = Pages.TARGET_MARKER_START
             elseif marker then
                 kind, value = "raidtarget", marker
+            elseif kind == "ping" then
+                value = data.actionID
             elseif kind == "macro" then
                 local name, _, body = GetMacroInfo(data.macroIndex)
                 if name == data.name and type(body) == "string" then value = body end
@@ -68,6 +70,8 @@ function EmotePanel:BuildCombatLayout()
                 value = data.actionID
             elseif kind == "item" then
                 value = "item:" .. data.actionID
+            elseif kind == "toy" then
+                value = data.actionID
             elseif kind == "action" then
                 value = data.actionID
             elseif data and not data.secureClick and not outOfCombat then
@@ -154,7 +158,7 @@ function EmotePanel:ShowCombatPage(index, selection, navigation)
     self.canPageLeft = page.left ~= nil
     self.canPageRight = page.right ~= nil
     self.canGoBack = page.back ~= nil
-    if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
+    self.wheelTooltip:Hide()
     self.selected = nil
     self:RefreshWheel(selection)
     if changedPage then self:AnimateWheelPage(navigation) end
@@ -169,6 +173,8 @@ function EmotePanel:CloseCombatDisplay()
     if not InCombatLockdown() then self:LoadPosition() end
     self:ShowStartPage()
     Pages.HandleAutomaticActionsChanged()
+    -- The secure state driver can close the wheel after PLAYER_REGEN_ENABLED.
+    ns.SettingsUI.RestoreAfterCombat()
 end
 
 function EmotePanel:ActivateCombatSector(sector, fromMouse)
@@ -193,6 +199,8 @@ local BIND = [[
         elseif self:GetAttribute("submenu-origin") then
             self:SetBindingClick(true, "PAD3", name, "ClearMark")
             self:SetBindingClick(true, "PAD4", name, "MarkSelf")
+        elseif self:GetAttribute("p" .. self:GetAttribute("page") .. "-ping") then
+            self:SetBindingClick(true, "PAD4", name, "PingSelf")
         end
         self:SetBindingClick(true, "PADFORWARD", name, "Close")
         self:SetBindingClick(true, "ESCAPE", name, "Close")
@@ -221,11 +229,16 @@ local CLOSE = [[
 
 local SHOW_PAGE = [[
     local page, sector, navigation = ...
+    local previous = self:GetAttribute("page")
     self:SetAttribute("page", page)
     self:SetAttribute("sector", sector)
     self:SetAttribute("press-page", nil)
     self:SetAttribute("press-target", nil)
     self:SetAttribute("press-button", nil)
+    if self:GetAttribute("p" .. page .. "-ping")
+        or (previous and self:GetAttribute("p" .. previous .. "-ping")) then
+        self:RunAttribute("bind-input")
+    end
     self:CallMethod("DrawPage", page, sector, navigation)
 ]]
 
@@ -262,6 +275,8 @@ local PRE_CLICK = [[
     self:SetAttribute("type", nil)
     self:SetAttribute("commit", nil)
     self:SetAttribute("autocast-commit", nil)
+    local menu = self:GetFrameRef("game-menu")
+    if menu and menu:IsVisible() then return end
     local combat = SecureCmdOptionParse("[combat] 1; 0") == "1"
     if button == "Toggle" or button == "TogglePet" then
         if down then return end
@@ -316,7 +331,12 @@ local PRE_CLICK = [[
     local prefix = "p" .. page .. "-"
     local count = self:GetAttribute(prefix .. "count")
     local target = button
-    if button == "LeftButton" or button == "RightButton" then target = self:RunAttribute("hit", button) end
+    local pingPage = self:GetAttribute(prefix .. "ping")
+    local pingUnit = pingPage and self:GetAttribute("ping-unit-" .. button)
+    if button == "PingSelf" and not pingUnit then return end
+    local mouseClick = button == "LeftButton" or button == "RightButton" or (pingPage and button == "MiddleButton")
+    if mouseClick then target = self:RunAttribute("hit", button) end
+    local selectPing = button == "PingSelf"
     local markSelf = button == "MarkSelf"
     if markSelf and not self:GetAttribute("submenu-origin") then return end
     local toggleAutocast = button == "PetAutocast" or (button == "RightButton" and type(target) == "number")
@@ -325,7 +345,7 @@ local PRE_CLICK = [[
         target = nil
     end
     if down then
-        if button == "Accept" or button == "PetAutocast" or markSelf then
+        if button == "Accept" or button == "PetAutocast" or markSelf or selectPing then
             target = nil
             if not IsModifierKeyDown() then
                 target = self:RunAttribute("aim", count) or self:GetAttribute("sector")
@@ -339,7 +359,7 @@ local PRE_CLICK = [[
     end
     local pressedTarget = self:GetAttribute("press-target")
     local pressed = self:GetAttribute("press-page") == page and self:GetAttribute("press-button") == button
-    if button == "Accept" or button == "PetAutocast" or markSelf then target = pressedTarget end
+    if button == "Accept" or button == "PetAutocast" or markSelf or selectPing then target = pressedTarget end
     self:SetAttribute("press-page", nil)
     self:SetAttribute("press-target", nil)
     self:SetAttribute("press-button", nil)
@@ -381,7 +401,7 @@ local PRE_CLICK = [[
             self:CallMethod("DrawSelection", sector, true, true)
         end
     elseif type(target) == "number" then
-        if IsModifierKeyDown() and button ~= "LeftButton" then return end
+        if IsModifierKeyDown() and button ~= "LeftButton" and not (pingPage and mouseClick) then return end
         local sector = target
         if sector > count then return end
         self:SetAttribute("sector", sector)
@@ -421,7 +441,7 @@ local PRE_CLICK = [[
         elseif kind == "page" then
             self:RunAttribute("show-page", value, nil, true)
         else
-            if self:GetAttribute("remember-last-action") and not self:GetAttribute("submenu-origin") then
+            if self:GetAttribute("remember-last-action") and not self:GetAttribute("submenu-origin") and not pingPage then
                 local resumePrefix = self:GetAttribute("pet-wheel") and "pet-" or ""
                 self:SetAttribute(resumePrefix .. "resume-page", page)
                 self:SetAttribute(resumePrefix .. "resume-sector", sector)
@@ -430,7 +450,16 @@ local PRE_CLICK = [[
             if kind == "ordinary" then
                 -- CallMethod cannot return the outcome to the secure close handler.
                 self:CallMethod("UseOrdinary", sector, button == "LeftButton")
-            elseif kind == "spell" or kind == "item" or kind == "macro" then
+            elseif kind == "ping" and pingUnit then
+                local condition = "[@" .. pingUnit .. ",exists]"
+                if SecureCmdOptionParse(condition .. " 1; 0") == "1" then
+                    self:SetAttribute("macrotext", self:GetAttribute("ping-command") .. " " .. condition .. " " .. value)
+                    self:SetAttribute("type", "macro")
+                    self:SetAttribute("commit", true)
+                else
+                    self:CallMethod("ShowUnavailable", "no-target", sector)
+                end
+            elseif kind == "spell" or kind == "item" or kind == "macro" or kind == "toy" then
                 self:SetAttribute(kind == "macro" and "macrotext" or kind, value)
                 self:SetAttribute("type", kind)
                 self:SetAttribute("commit", true)
@@ -456,6 +485,7 @@ local POST_CLICK = [[
     self:SetAttribute("type", nil)
     self:SetAttribute("spell", nil)
     self:SetAttribute("item", nil)
+    self:SetAttribute("toy", nil)
     self:SetAttribute("action", nil)
     self:SetAttribute("marker", nil)
     self:SetAttribute("unit", nil)
@@ -519,8 +549,17 @@ local function CreateCombatInput(self)
     button:SetAttribute("close-wheel", CLOSE)
     button:SetAttribute("mark-target", MARK_TARGET)
     button:SetAttribute("show-page", SHOW_PAGE)
+    for input, unit in pairs(Input.PING_INPUT_UNITS) do button:SetAttribute("ping-unit-" .. input, unit) end
     button:SetAttribute("hit", HIT)
     button:SetAttribute("aim", AIM)
+    if GameMenuFrame then
+        -- Inherit the menu's visibility so its native show can close protected input.
+        local menu = CreateFrame("Frame", nil, GameMenuFrame, "SecureHandlerShowHideTemplate")
+        menu:SetFrameRef("wheel", button)
+        menu:SetAttribute("_onshow", [[ self:GetFrameRef("wheel"):RunAttribute("close-wheel") ]])
+        button:SetFrameRef("game-menu", menu)
+        menu:Show()
+    end
     button:SetAttribute("_onstate-combat", [[
         if newstate ~= "combat" then self:RunAttribute("close-wheel") end
     ]])
@@ -575,7 +614,7 @@ local function CreateCombatInput(self)
         local page = EmotePanel.combatPages[input:GetAttribute("page")]
         local selected, aim
         local pressed = input:GetAttribute("press-button")
-        if pressed == "Accept" or pressed == "PetAutocast" then
+        if pressed == "Accept" or pressed == "PetAutocast" or pressed == "PingSelf" then
             selected = input:GetAttribute("press-target")
         else
             aim = ReadAim(input, page.count)
@@ -637,6 +676,7 @@ function EmotePanel:SyncCombatWheel(refreshControls)
         self.combatPages = pages
         self.combatLayoutDirty = nil
         button:SetAttribute("start", start)
+        button:SetAttribute("ping-command", Entries.GetPingCommand())
         button:SetAttribute("stop-at-segment-ends", EmotePanelSavedVars.stopAtSegmentEnds == true)
         button:SetAttribute("pet-start", petStart)
         button:SetAttribute("cached-pet", cachedPet)
@@ -646,6 +686,7 @@ function EmotePanel:SyncCombatWheel(refreshControls)
         for index, page in pairs(pages) do
             local prefix = "p" .. index .. "-"
             button:SetAttribute(prefix .. "count", page.count)
+            button:SetAttribute(prefix .. "ping", page.mode == "pings" or nil)
             button:SetAttribute(prefix .. "Left", page.left)
             button:SetAttribute(prefix .. "Right", page.right)
             button:SetAttribute(prefix .. "Back", page.back)

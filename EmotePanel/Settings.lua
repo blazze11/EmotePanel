@@ -16,6 +16,63 @@ local function OpenSettings(page)
     if SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
     window:SelectPage(page or "general")
     window:Show()
+    return true
+end
+
+local function OpenWheelBindingSetup()
+    if not ns.Profiles.IsReady() then
+        Widgets.ShowError("Wait until your profile has finished loading.")
+        return
+    end
+    if OpenSettings("general") then EmotePanel.optionsPanel:StartWheelBindingCapture(1) end
+end
+
+local suspendedPage
+local function SuspendForCombat()
+    local window = EmotePanel.settingsWindow
+    if window:IsShown() then
+        suspendedPage = window.activePage
+        window:Hide()
+    end
+end
+
+local function RestoreAfterCombat()
+    if suspendedPage and OpenSettings(suspendedPage) then suspendedPage = nil end
+end
+
+local function ToggleSettings()
+    local window = EmotePanel.settingsWindow
+    if not window or EmotePanel.combatView or InCombatLockdown() then return end
+    if window:IsShown() then window:Hide() else OpenSettings() end
+end
+
+local function ConfirmResetToDefaults()
+    if InCombatLockdown() then
+        Widgets.ShowError("Reset the addon outside combat.", LE_GAME_ERR_AFFECTING_COMBAT)
+        return
+    end
+    local profiles = ns.Profiles
+    if not profiles.IsReady() then
+        Widgets.ShowError("Wait until your profile has finished loading.")
+        return
+    end
+    local name = profiles.ActiveName()
+    local displayName = name:gsub("|", "||")
+    Widgets.ShowConfirmation("EMOTEPANEL_RESET_SETTINGS",
+        "Reset profile " .. displayName .. " to addon defaults?\n\nCustom entries, Favorites, and Action selections in this profile will be reset. Other profiles and WoW keybinds are kept.",
+        function()
+            if InCombatLockdown() then
+                Widgets.ShowError("Reset the addon outside combat.", LE_GAME_ERR_AFFECTING_COMBAT)
+                return
+            end
+            if profiles.ActiveName() ~= name then
+                Widgets.ShowError("The active profile changed. Open the reset dialog again.")
+                return
+            end
+            local success, reason = profiles.ResetActive()
+            if not success then Widgets.ShowError(reason); return end
+            if OpenSettings("general") then EmotePanel.optionsPanel:OnRefresh() end
+        end)
 end
 
 local function CycleSetting(values, current, direction)
@@ -45,6 +102,7 @@ StaticPopupDialogs["EMOTEPANEL_RESET_ALL"] = {
     button1 = "Yes",
     button2 = "No",
     OnAccept = function()
+        if not ns.Profiles.IsReady() then Widgets.ShowError("Wait until your profile has finished loading."); return end
         EmotePanelSavedVars.customMessages = {}
         EmotePanelSavedVars.customButtonNames = {}
         EmotePanelSavedVars.customIcons = {}
@@ -99,10 +157,22 @@ local function HasGamepadWheelBinding(pet)
     return false
 end
 
-local function ShowLoginWarnings()
-    if not EmotePanel:HasWheelBinding() then
-        UIErrorsFrame:AddExternalWarningMessage("No wheel keybind is set. Assign one under Controller Setup in /ep config.")
+local function WarnMissingWheelBinding()
+    if ns.Profiles.IsReady() and not EmotePanel:HasWheelBinding() then
+        print("|cffff2020EmotePanel: No wheel keybind is set. Type /ep setup to assign one.|r")
     end
+end
+
+local loginBindingWarningPending
+local function CheckLoginBindingWarning()
+    if not loginBindingWarningPending or not ns.Profiles.IsReady() then return end
+    loginBindingWarningPending = nil
+    WarnMissingWheelBinding()
+end
+
+local function ShowLoginWarnings()
+    loginBindingWarningPending = true
+    CheckLoginBindingWarning()
 
     if not C_CVar.GetCVarBool("GamePadEnable")
         and (HasGamepadWheelBinding() or (EmotePanel.supportsPetWheel and HasGamepadWheelBinding(true))) then
@@ -112,8 +182,6 @@ local function ShowLoginWarnings()
         UIErrorsFrame:AddExternalWarningMessage(GAMEPAD_BETA_TIP)
     end
 end
-
-local resetOnLogout
 
 local function CreateHelpPanel(mainPanel)
     local helpPanel = CreateFrame("Frame", AddonName .. "HelpPanel", mainPanel)
@@ -494,6 +562,7 @@ end
 
 local function CreateCategoriesPanel(mainPanel)
     local panel = CreateFrame("Frame", AddonName .. "CategoriesPanel", mainPanel)
+    local rowHeight = 27
     panel.name = "Categories"
 
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
@@ -597,7 +666,7 @@ local function CreateCategoriesPanel(mainPanel)
         function row:MoveCategory(step)
             return MoveCategory(id, step)
         end
-        row:SetHeight(30)
+        row:SetHeight(rowHeight)
         local check = CreateFrame("CheckButton", nil, row, "UICheckButtonTemplate")
         check:SetSize(24, 24)
         check:SetPoint("LEFT")
@@ -648,7 +717,7 @@ local function CreateCategoriesPanel(mainPanel)
             local name = Entries.GetEntryName("categories", id, data):gsub("|", "||")
             row.label:SetText(name)
             Widgets.SetIconTexture(row.icon, Entries.GetEntryIcon("categories", id, data))
-            local y = -136 - (position - 1) * 30
+            local y = -136 - (position - 1) * rowHeight
             row:SetPoint("TOPLEFT", 16, y)
             row:SetPoint("TOPRIGHT", -24, y)
             row:SetAlpha(enabled and 1 or 0.5)
@@ -982,7 +1051,10 @@ local function CreateWheelBindingControls(panel, header)
     end
     local function SetBindingAt(index, key)
         local bindingSlot, pet = BindingSlot(index)
-        return EmotePanel:SetWheelBinding(bindingSlot, key, pet)
+        local hadMainBinding = EmotePanel:HasWheelBinding()
+        local success, message = EmotePanel:SetWheelBinding(bindingSlot, key, pet)
+        if success and hadMainBinding then WarnMissingWheelBinding() end
+        return success, message
     end
 
     function panel:RefreshWheelBindings()
@@ -990,6 +1062,21 @@ local function CreateWheelBindingControls(panel, header)
             local key = EmotePanel:GetWheelBinding(BindingSlot(index))
             button:SetText(slot == index and "Press a key..." or key and (GetBindingText(key) or key) or "Not bound")
         end
+    end
+
+    function panel:StartWheelBindingCapture(index)
+        if slot == index then return end
+        capture:Hide()
+        slot, remaining, held = index, timeout, 0
+        if GameTooltip:IsShown() then GameTooltip:Hide() end
+        dialog.TitleContainer.TitleText:SetText(titles[index])
+        ShowCapturePrompt()
+        cancel:Show()
+        capture:EnableKeyboard(true)
+        capture:EnableGamePadButton(true)
+        capture:SetPropagateKeyboardInput(false)
+        capture:Show()
+        panel:RefreshWheelBindings()
     end
 
     for index, title in ipairs(titles) do
@@ -1011,25 +1098,18 @@ local function CreateWheelBindingControls(panel, header)
         end
         button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
         button:SetScript("OnClick", function(_, mouseButton)
-            local sameSlot = slot == index
-            capture:Hide()
             if InCombatLockdown() then
+                capture:Hide()
                 status:SetText("Set the wheel keybind outside combat.")
             elseif mouseButton == "RightButton" then
+                capture:Hide()
                 local success, message = SetBindingAt(index, nil)
                 status:SetText(success and ControllerTip() or message)
                 panel:RefreshWheelBindings()
-            elseif not sameSlot then
-                slot, remaining, held = index, timeout, 0
-                if GameTooltip:IsShown() then GameTooltip:Hide() end
-                dialog.TitleContainer.TitleText:SetText(title)
-                ShowCapturePrompt()
-                cancel:Show()
-                capture:EnableKeyboard(true)
-                capture:EnableGamePadButton(true)
-                capture:SetPropagateKeyboardInput(false)
-                capture:Show()
-                panel:RefreshWheelBindings()
+            elseif slot == index then
+                capture:Hide()
+            else
+                panel:StartWheelBindingCapture(index)
             end
         end)
         Widgets.AddSettingsTooltip(button, title, "Click and press a keyboard key or controller button to assign it and replace its current WoW binding. Right-click clears this binding. The keybind works in and out of combat.", index == 1 and label or index == 3 and petLabel or nil)
@@ -1231,7 +1311,12 @@ local function CreateSettingsWindow()
     window:Hide()
     window.Bg:SetColorTexture(0.12, 0.09, 0.07, 1)
     Widgets.SetChatPortrait(window)
-    window.TitleContainer.TitleText:SetText("EmotePanel")
+    function window:RefreshTitle()
+        local profile = ns.Profiles.ready and ns.Profiles.ActiveName() or "Loading profile"
+        local displayName = profile:gsub("|", "||")
+        self.TitleContainer.TitleText:SetText(("EmotePanel v%s — %s"):format(ns.version, displayName))
+    end
+    window:RefreshTitle()
     window.CloseButton:SetScript("OnClick", function() window:Hide() end)
     Widgets.MakeTitleDraggable(window)
     table.insert(UISpecialFrames, window:GetName())
@@ -1262,7 +1347,7 @@ local function CreateSettingsWindow()
     end
 
     local pages, tabs, activePage, activeIndex = {}, {}, nil, nil
-    local selected
+    local selected, selectedHighlight
     local function PageShortcut(key)
         local shortcuts = activePage and activePage.view.settingsShortcuts
         local button = shortcuts and shortcuts[key]
@@ -1285,7 +1370,7 @@ local function CreateSettingsWindow()
         end
         if CanEdit(selected) then Add("PAD4", "Y", "Edit") end
         if CanDelete(selected) then Add("PADBACK", "Select", "Delete") end
-        if selected and selected.MoveSetting then Add("DIRPADHORIZONTAL", "Left/Right", "Reorder") end
+        if selected and selected.MoveSetting then Add("DIRPADHORIZONTAL", "Left/Right", selected.settingsMoveLabel or "Reorder") end
         local choose = PageShortcut("PAD3")
         if choose then Add("PAD3", "X", choose:GetText()) end
         local editShortcut = PageShortcut("PAD4")
@@ -1315,13 +1400,16 @@ local function CreateSettingsWindow()
     end
 
     local function Focus(control)
-        if selected then selected.settingsFocusHighlight:Hide() end
+        -- Native dropdown rows discard custom fields when their menu is released.
+        -- Keep the active texture independently so cleanup survives that reset.
+        if selectedHighlight then selectedHighlight:Hide() end
+        selectedHighlight = nil
         selected = control
         if control and control.selection and activePage.view.ClearSelection then
             activePage.view:ClearSelection()
         end
         window:RefreshFocusPrompt()
-        if not control then return end
+        if not control or selected ~= control then return end
 
         local parent, row = control, nil
         while parent and parent ~= window do
@@ -1349,6 +1437,7 @@ local function CreateSettingsWindow()
         local labelRight = control.settingsFocusText and control.settingsFocusText:GetRight()
         local extension = right and labelRight and math.max(0, labelRight - right) or 0
         highlight:SetPoint("BOTTOMRIGHT", control, "BOTTOMRIGHT", extension, 0)
+        selectedHighlight = highlight
         highlight:Show()
     end
 
@@ -1414,6 +1503,10 @@ local function CreateSettingsWindow()
     local repeatInterval = 0.175
     local repeatKey, repeatRemaining, repeatControl
     local function StepVertical(key)
+        if activePage.view.HandleSettingsMenu then
+            local handled = activePage.view:HandleSettingsMenu(key)
+            if handled ~= nil then return handled end
+        end
         local controls = GetControls()
         local nextControl
         if #controls > 0 then
@@ -1502,8 +1595,9 @@ local function CreateSettingsWindow()
         if key == repeatKey then repeatKey = nil end
         self:SetPropagateKeyboardInput(not handled)
         if not handled or handled == "step" or not IsSettingsInput(key) then return end
+        if activePage.view.HandleSettingsMenu and activePage.view:HandleSettingsMenu(key) then return end
         if key == "PAD2" then
-            self:Hide()
+            if not (activePage.view.Back and activePage.view:Back()) then self:Hide() end
         elseif key == "PADLSHOULDER" or key == "PADRSHOULDER" then
             local step = key == "PADLSHOULDER" and -1 or 1
             self:SelectPage(pages[(activeIndex - 1 + step) % #pages + 1].key)
@@ -1536,13 +1630,15 @@ local function CreateSettingsWindow()
                         selected.check:Click("LeftButton")
                     end
                 else
-                    selected:Click(key == "PAD3" and "RightButton" or "LeftButton")
+                    if selected.settingsActivate then selected.settingsActivate()
+                    else selected:Click(key == "PAD3" and "RightButton" or "LeftButton") end
                 end
                 self:RefreshFocusPrompt()
             end
         end
     end)
     window:SetScript("OnShow", function(self)
+        self:RefreshTitle()
         self:FitToScreen()
         self:EnableGamePadButton(true)
         Input.SetConsolePortCursorObstructed(self, true)
@@ -1665,19 +1761,18 @@ local function CreateWheelBehaviorPanel(canvas)
     return panel
 end
 
-local function CreateGuidePanel(parent)
-    local panel = CreateFrame("Frame", AddonName .. "GuidePanel", parent)
-    local pages = {
+local function GuidePages()
+    return {
         {"Start Here", {
             {"Set up your wheel keybinds",
-                "On the General tab, assign a Wheel Keybind. If you play a Hunter or Warlock, you can also assign a Pet Keybind. Press either binding to open its wheel."},
+                "Choose Wheel Keybinds to assign keys for the main wheel and, on a Hunter or Warlock, the Pet Wheel. Type {/ep setup} outside combat to assign the primary Wheel Keybind directly."},
             {"Gamepad keybinds",
                 "Select a keybind slot and press the button you want to assign. On the wheel, use either stick to highlight a segment, or press D-pad up or down to move one segment at a time.\n\n"
                 .. "From Categories, use the left shoulder button to open Actions. Add abilities, items, or macros in the Actions settings tab first. Each type has its own highlight color. Use Back to return, or use the right shoulder button from the first Actions page when paging can wrap.\n\n"
                 .. "With a segment highlighted, use the buttons above to open or use it, edit it, or add or remove it from Favorites.",
                 "{PAD1} Open / Use    {PAD4} Edit    {PAD3} Favorite    {PAD2} Back"},
             {"Mouse and keyboard",
-                "Click a keybind slot, then press the key you want to assign. On the wheel, left-click to open or use a segment, right-click to edit it, and middle-click to add or remove it from Favorites. Scroll up from Categories to open Actions. Use your assigned keybind to open the wheel. To open settings, type {/ep} or left-click the minimap icon or EmotePanel in the Addon Compartment.",
+                "Click a keybind slot, then press the key you want to assign. On the wheel, left-click to open or use a segment, right-click to edit it, and middle-click to add or remove it from Favorites. Scroll up from Categories to open Actions. Use your assigned keybind to open the wheel. To open or close settings, type {/ep} or left-click the minimap icon or EmotePanel in the Addon Compartment. The New tab shows release notes.",
                 "{MOUSELEFT}    {MOUSERIGHT}    {MOUSEMIDDLE}"},
         }},
         {"Categories - Social", {
@@ -1695,8 +1790,13 @@ local function CreateGuidePanel(parent)
             {"Commands", "Opens your bags and runs common commands.\nExamples: Backpack, Dismount, Roll, Ready Check"},
             {"Player Interactions", "Enable this category on the Categories tab. Target another player for shortcuts such as Inspect, Trade, and Invite. Leave Group is available while grouped."},
             {"Game Panels", "Opens WoW windows outside combat.\nExamples: World Map, Quest Log, Character Info, Spellbook"},
+            {"Gamepad", "", "{PADLSTICKAXIS} or {DIRPADVERTICAL} Highlight    {PAD1} Open or use    {PAD2} Return"},
+            {"Mouse and keyboard", "", "{MOUSELEFT} Open or use    {MOUSERIGHT} the center to return"},
+        }},
+        {"Categories - Utilities", {
             {"Professions", "Opens professions your character has learned. Available outside combat.\nExamples: Alchemy, Blacksmithing, Cooking, Fishing"},
             {"Target Marker", "Marks your target or your own character. Open it from Categories or Commands.\nExamples: Mark Skull, Mark Cross, Mark Moon, Mark Star"},
+            {"Ping System", "Enable it in Categories to send Attack, Warning, Assist, and other group pings.", "{PAD1} Target    {PAD4} Self    {PAD2} Close"},
             {"Gamepad", "", "{PADLSTICKAXIS} or {DIRPADVERTICAL} Highlight    {PAD1} Open or use    {PAD2} Return"},
             {"Mouse and keyboard", "", "{MOUSELEFT} Open or use    {MOUSERIGHT} the center to return"},
         }},
@@ -1711,24 +1811,37 @@ local function CreateGuidePanel(parent)
                 "Choose a section, open its Add button, and click Save when you're done. Click the entry on the wheel to send it.",
                 "{MOUSELEFT}"},
         }},
-        {"Spells, Items, and Macros", {
+        {"Actions and Collections", {
             {"Add actions to the wheel",
-                "1. Open the Actions tab in Settings. Choose Abilities, Items, or Macros.\n"
-                .. "2. Check a spell, carried item, or saved macro to add it. Uncheck it to remove it. Try a healing spell or a potion.\n"
-                .. "3. Open the main wheel with your assigned keybind. From Categories, open Actions and use the entry you added. Use your wheel keybind in combat.\n"
-                .. "4. Automatic quest items and abilities is on by default. It adds tracked quest items and temporary abilities. Uncheck it in Actions to turn it off.\n"
-                .. "5. With ConsolePort, open Options on a usable item in your bags or an active spell in the spellbook. Choose Add to EmotePanel Actions. Use the same menu to remove it."},
-            {"Gamepad", "", "{DIRPADHORIZONTAL} Switch between Abilities, Items, and Macros    {PAD1} Check an entry or use it on the wheel    {PADLSHOULDER} Open Actions from Categories"},
+                "1. Open Actions in Settings. Choose Abilities, Items, Macros, Mounts, Companion Pets, or Toy Box.\n"
+                .. "2. Check an entry to add it. Uncheck it to remove it. Try adding a potion or a mount.\n"
+                .. "3. Open the main wheel with your assigned keybind. From Categories, open Actions and use the entry you added. Use your wheel keybind in combat."
+            },
+            {"Gamepad", "", "{DIRPADHORIZONTAL} Switch lists    {PAD1} Check an entry or use it on the wheel    {PADLSHOULDER} Open Actions from Categories"},
+            {"Mouse and keyboard", "Choose a list and check an entry. Scroll up from Categories to open Actions, then click the entry to use it.", "{MOUSELEFT}"},
+        }},
+        {"Automatic Actions and ConsolePort", {
+            {"More ways to add actions",
+                "1. Automatic quest items and abilities is on by default. It adds tracked quest items and temporary abilities. Uncheck it in Actions to turn it off.\n"
+                .. "2. Use mounts and companion pets outside combat. The Toy Box list follows your in-game Toy Box filters.\n"
+                .. "3. With ConsolePort, open Options on a bag item or an active spell in the spellbook. Choose Add to EmotePanel Actions. Use the same menu to remove it."},
+            {"Gamepad", "", "{DIRPADHORIZONTAL} Switch lists    {PAD1} Check an entry or use it on the wheel    {PADLSHOULDER} Open Actions from Categories"},
             {"Mouse and keyboard",
                 "Choose a list and check an entry. Scroll up from Categories to open Actions, then click the entry to use it.",
                 "{MOUSELEFT}"},
         }},
-        {"Edit, Reorder, Hide, and Favorite", {
+        {"Edit, Reorder, and Hide", {
             {"Customize what appears",
                 "1. Edit an entry. Highlight it on the wheel or find it under Entries. Open its editor to change its icon or edit a custom message. To change the icon, open Choose Icon, pick one, then save the entry.\n"
-                .. "2. Move or hide an entry. In Entries, choose its section and find the row. Move it up or down to change its position. Uncheck it to hide it. Check it again to bring it back.\n"
-                .. "3. Arrange the opening wheel. Open Categories to move or hide category shortcuts. You can show up to eight at a time.\n"
-                .. "4. Add a Favorite. Open Commands on the wheel and highlight Backpack. Favorite it, then go back and open Favorites to find it. Use the same control to remove it. You can also choose Favorite or Unfavorite in the entry editor, then save."},
+                .. "2. Move or hide an entry. In Entries, choose its section and find the row. Move it up or down to change its position. Uncheck it to hide it. Check it again to bring it back."
+            },
+            {"Gamepad", "", "{PAD4} Edit or open Choose Icon    {PAD1} Choose an icon, save, or toggle a checkbox    {DIRPADHORIZONTAL} Move a focused row"},
+            {"Mouse and keyboard", "Edit an entry with Right-Click. Select a row with Left-Click, then click Up or Down to move it. Click its checkbox to hide or show it.", "{MOUSERIGHT}    {MOUSELEFT}"},
+        }},
+        {"Categories and Favorites", {
+            {"Arrange your shortcuts",
+                "1. Arrange the opening wheel. Open Categories to move or hide category shortcuts. You can show up to eight at a time.\n"
+                .. "2. Add a Favorite. Open Commands on the wheel and highlight Backpack. Favorite it, then go back and open Favorites to find it. Use the same control to remove it. You can also choose Favorite or Unfavorite in the entry editor, then save."},
             {"Gamepad", "", "{PAD4} Edit or open Choose Icon    {PAD1} Choose an icon, save, or toggle a checkbox    {DIRPADHORIZONTAL} Move a focused row    {PAD3} Favorite a highlighted wheel entry"},
             {"Mouse and keyboard",
                 "Edit an entry with Right-Click. Select a row with Left-Click, then click Up or Down to move it. Click its checkbox to hide or show it. Middle-Click a wheel entry to favorite it.",
@@ -1754,27 +1867,66 @@ local function CreateGuidePanel(parent)
                 "Left-Click a marker to mark your target. To mark yourself with the mouse, select your character first. Click the center icon to clear the mark.",
                 "{MOUSELEFT}"},
         }},
+        {"Profiles", {
+            {"Your character profile", "A profile named Firstname Lastname is created and selected automatically. New characters start with fresh settings. When upgrading from a version without profiles, your current setup is copied into this profile."},
+            {"Default", "Default is the fresh-install preset. Editing it creates a character copy. Named profiles save changes automatically; characters using the same profile share them."},
+            {"Create and switch",
+                "1. Open Profiles in Settings and choose Save As. Enter a new name and confirm Save As. Your setup is copied and the new profile becomes active.\n"
+                .. "2. Changes save to the active profile shown in the Settings title bar.\n"
+                .. "3. Open the profile dropdown to switch setups. Each character remembers its selected profile."},
+            {"Wheel key conflicts", "Review any key already assigned to another WoW action before switching. If login leaves keybinds pending, select the active profile to review the changes."},
+            {"Minimap button", "Drag the minimap button to save its position in this profile. Reset to Defaults restores its original position."},
+            {"Gamepad", "", "{PAD1} Open / Choose    {DIRPADVERTICAL} Move    {PAD2} Back"},
+            {"Mouse and keyboard", "Click the profile dropdown to choose a setup. Click Save As to make a named copy.", "{MOUSELEFT}"},
+        }},
+        {"Import and Export Profiles", {
+            {"Share a profile",
+                "1. Choose Export, check what to include, and select Continue. Copy the export text.\n"
+                .. "2. Choose Import and paste an export. Continue to the checkboxes and choose what to include.\n"
+                .. "3. Continue, enter a new profile name, and confirm Create Profile. The new profile becomes active. Unchecked fields use addon defaults. Unavailable actions stay saved for later."},
+            {"Custom entries", "Include both Name and Message / Command to create an entry. Leave all its fields unchecked to skip it everywhere, including Favorites and order. An omitted icon uses the default."},
+            {"Gamepad", "", "{PAD1} Open / Choose    {DIRPADVERTICAL} Move    {DIRPADHORIZONTAL} Expand / Collapse groups    {PAD2} Back"},
+            {"Mouse and keyboard", "Click the dropdown or buttons. Use your keyboard to enter names and copy or paste export text.", "{MOUSELEFT}"},
+        }},
         {"Slash Commands", {
             {"Mouse and keyboard", "Open chat, type a command, and press Enter."},
-            {"/ep or /emotepanel", "Open EmotePanel Settings."},
-            {"/ep config", "Open EmotePanel Settings."},
+            {"/ep or /emotepanel", "Open or close EmotePanel Settings. If combat closes Settings, it reopens on the same tab afterward."},
+            {"/ep config", "Open Settings on the General tab."},
+            {"/ep setup", "Open the primary wheel keybind dialog outside combat."},
             {"/ep list", "Open Entries on Favorites."},
-            {"/ep actions", "Choose spells, items, and macros for the wheel."},
+            {"/ep actions", "Choose actions for the wheel."},
+            {"/ep profiles", "Switch profiles, review pending wheel keys, save a copy, delete, import, or export."},
+        }},
+        {"Slash Commands - More", {
+            {"Mouse and keyboard", "Open chat, type a command, and press Enter."},
             {"/ep categories", "Choose and arrange categories."},
-            {"/ep reset", "Ask to restore the original icons, names, and text for built-in entries."},
+            {"/ep reset", "Confirm a full reset of the active profile to addon defaults. Opens General after the reset."},
             {"/ep debug", "Check whether combat logging is on."},
             {"/ep debug on or /ep debug off", "Turn combat logging on or off for this session."},
             {"/ep help or /ep scroll", "Open this guide."},
+            {"/ep new", "Open the New tab to read release notes."},
         }},
     }
+end
 
+local function CreateSettingsBook(parent, panelName, pages, firstPageAction)
+    local panel = CreateFrame("Frame", AddonName .. panelName, parent)
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 16, -16)
     local count = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     count:SetPoint("TOPRIGHT", -20, -18)
+    local firstPageButton
+    if firstPageAction then
+        firstPageButton = Widgets.CreateRedButton(panel, firstPageAction.label)
+        firstPageButton:SetSize(138, 24)
+        firstPageButton:SetPoint("RIGHT", count, "LEFT", -12, 0)
+        firstPageButton:SetScript("OnClick", firstPageAction.onClick)
+        Widgets.AddSettingsTooltip(firstPageButton, firstPageAction.label, firstPageAction.description)
+    end
     local content = CreateFrame("Frame", nil, panel)
     content:SetPoint("TOPLEFT", panel, "TOPLEFT", 16, -44)
-    content:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -20, 44)
+    content:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -20, 52)
+    content:SetClipsChildren(true)
     local glyphFallbacks = {
         PADLSTICKAXIS = "Stick",
         PAD1 = "A/Cross", PAD2 = "B/Circle", PAD3 = "X/Square", PAD4 = "Y/Triangle",
@@ -1786,7 +1938,7 @@ local function CreateGuidePanel(parent)
         MOUSERIGHT = {label = "Right-Click", atlas = "newplayertutorial-icon-mouse-rightbutton"},
         MOUSEMIDDLE = {label = "Middle-Click", texture = "Interface\\AddOns\\" .. AddonName .. "\\Art\\MouseMiddle"},
     }
-    local function RenderGuideText(text)
+    local function RenderText(text)
         return (text:gsub("{([^{}]+)}", function(token)
             if token:sub(1, 1) == "/" then return "|cff80c8ff" .. token .. "|r" end
             local mouse = mouseButtons[token]
@@ -1801,9 +1953,9 @@ local function CreateGuidePanel(parent)
             return Widgets.GamepadGlyph(token, glyphFallbacks[token])
         end))
     end
-    local function RenderGuideBody(text)
+    local function RenderBody(text)
         text = text:gsub("\n(%d+%. )", "\n\n|cffffd100%1|r")
-        return RenderGuideText((text:gsub("^(%d+%. )", "|cffffd100%1|r")))
+        return RenderText((text:gsub("^(%d+%. )", "|cffffd100%1|r")))
     end
     local rows = {}
     local maxRows = 0
@@ -1819,7 +1971,7 @@ local function CreateGuidePanel(parent)
         controls:SetPoint("TOPRIGHT", heading, "BOTTOMRIGHT", 0, -4)
         controls:SetJustifyH("LEFT")
         local row = {heading = heading, body = body, controls = controls, prompts = ""}
-        Widgets.SetGlyphPrompt(controls, function() return RenderGuideText(row.prompts) end)
+        Widgets.SetGlyphPrompt(controls, function() return RenderText(row.prompts) end)
         rows[index] = row
     end
 
@@ -1831,18 +1983,73 @@ local function CreateGuidePanel(parent)
     nextPage:SetSize(124, 26)
     nextPage:SetPoint("BOTTOMRIGHT", -20, 10)
     nextPage:Show()
-    Widgets.AddSettingsTooltip(previous, "Previous Page", "Go to the previous guide page.")
-    Widgets.AddSettingsTooltip(nextPage, "Next Page", "Go to the next guide page.")
+    Widgets.AddSettingsTooltip(previous, "Previous Page", "Go to the previous page.")
+    Widgets.AddSettingsTooltip(nextPage, "Next Page", "Go to the next page.")
     panel.settingsShortcuts = {PAD3 = nextPage, PAD4 = previous}
-    local currentPage
+    local currentPage, bookPages
+    local measuredWidth, measuredHeight
+    local measurement = CreateFrame("Frame", nil, content)
+    measurement:Hide()
+    local measureHeading = measurement:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    local measureBody = measurement:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    local measureControls = measurement:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    for _, measure in ipairs({measureHeading, measureBody, measureControls}) do measure:Hide() end
+    local function PageGap(source)
+        if source == "Start Here" then return 22 end
+        if source:find("Slash Commands", 1, true) == 1 then return 10 end
+        if source:find("Categories -", 1, true) == 1 then return 8 end
+        return 14
+    end
+    local function MeasureEntry(entry, source, width)
+        measureHeading:SetWidth(width)
+        measureHeading:SetText(entry[1])
+        local height = measureHeading:GetStringHeight()
+        if entry[3] then
+            measureControls:SetWidth(width)
+            measureControls:SetWordWrap(source ~= "Start Here")
+            measureControls:SetText(RenderText(entry[3]))
+            height = height + 4 + (source == "Start Here" and 36 or measureControls:GetStringHeight())
+        end
+        if entry[2] ~= "" then
+            measureBody:SetWidth(width)
+            measureBody:SetWordWrap(true)
+            measureBody:SetText(RenderBody(entry[2]))
+            height = height + 3 + measureBody:GetStringHeight()
+        end
+        return height
+    end
+    local function BuildBook()
+        local width, height = math.max(1, content:GetWidth()), math.max(1, content:GetHeight())
+        if bookPages and width == measuredWidth and height == measuredHeight then return end
+        measuredWidth, measuredHeight = width, height
+        bookPages = {}
+        for _, source in ipairs(pages) do
+            local page, used, part = nil, 0, 0
+            for _, entry in ipairs(source[2]) do
+                local rowHeight = MeasureEntry(entry, source[1], width)
+                local gap = page and PageGap(source[1]) or 6
+                if not page or used + gap + rowHeight > height then
+                    part = part + 1
+                    page = {source[1] .. (part > 1 and " (continued)" or ""), {}, source = source[1]}
+                    bookPages[#bookPages + 1] = page
+                    used, gap = 0, 6
+                end
+                page[2][#page[2] + 1] = entry
+                used = used + gap + rowHeight
+            end
+        end
+    end
     local function ShowPage(index, turnPage)
+        BuildBook()
+        index = math.max(1, math.min(#bookPages, index))
         currentPage = index
-        local page = pages[index]
+        local page = bookPages[index]
         title:SetText(page[1])
-        count:SetText(("%d / %d"):format(index, #pages))
-        local reference = index == #pages
-        local overview = index == 2 or index == 3
-        local gap = index == 1 and 22 or (reference and 10 or (overview and 8 or 14))
+        count:SetText(("%d / %d"):format(index, #bookPages))
+        if firstPageButton then firstPageButton:SetShown(index == 1) end
+        local reference = page.source:find("Slash Commands", 1, true) == 1
+        local start = page.source == "Start Here"
+        local gap = PageGap(page.source)
         local anchor = content
         for rowIndex, row in ipairs(rows) do
             local heading, body, controls = row.heading, row.body, row.controls
@@ -1857,7 +2064,7 @@ local function CreateGuidePanel(parent)
                 local edge = rowIndex == 1 and "TOP" or "BOTTOM"
                 heading:SetPoint("TOPLEFT", anchor, edge .. "LEFT", 0, offset)
                 heading:SetPoint("TOPRIGHT", anchor, edge .. "RIGHT", 0, offset)
-                if reference and rowIndex > 1 then
+                if reference and entry[1]:sub(1, 1) == "/" then
                     heading:SetTextColor(0.5, 0.78, 1)
                 else
                     heading:SetTextColor(NORMAL_FONT_COLOR:GetRGB())
@@ -1867,16 +2074,16 @@ local function CreateGuidePanel(parent)
                 local textAnchor = entry[3] and controls or heading
                 body:SetPoint("TOPLEFT", textAnchor, "BOTTOMLEFT", 0, -3)
                 body:SetPoint("TOPRIGHT", textAnchor, "BOTTOMRIGHT", 0, -3)
-                body:SetText(RenderGuideBody(entry[2]))
-                controls:SetWordWrap(index ~= 1)
-                controls:SetHeight(index == 1 and 36 or 0)
+                body:SetText(RenderBody(entry[2]))
+                controls:SetWordWrap(not start)
+                controls:SetHeight(start and 36 or 0)
                 row.prompts = entry[3] or ""
                 Widgets.RefreshGlyphPrompt(controls)
                 anchor = hasBody and body or textAnchor
             end
         end
         previous:SetEnabled(index > 1)
-        nextPage:SetEnabled(index < #pages)
+        nextPage:SetEnabled(index < #bookPages)
         local window = EmotePanel.settingsWindow
         if turnPage then
             window:FocusEntry(panel, nextPage:IsEnabled() and nextPage or previous)
@@ -1885,8 +2092,47 @@ local function CreateGuidePanel(parent)
     end
     previous:SetScript("OnClick", function() ShowPage(currentPage - 1, true) end)
     nextPage:SetScript("OnClick", function() ShowPage(currentPage + 1, true) end)
-    panel:SetScript("OnShow", function() ShowPage(1) end)
+    panel:SetScript("OnShow", function()
+        bookPages = nil
+        ShowPage(1)
+    end)
+    panel:SetScript("OnSizeChanged", function()
+        if panel:IsShown() then ShowPage(currentPage or 1) end
+    end)
     return panel
+end
+
+local function CreateChangelogPanel(parent)
+    -- These are the player-facing highlights from CHANGELOG.md.
+    return CreateSettingsBook(parent, "NewPanel", {
+        {"Version 0.25.0", {
+            {"• Character profiles and sharing", ""},
+            {"• Mounts, companion pets, and toys in Actions", ""},
+            {"• Group pings from the wheel", ""},
+            {"• Quick setup and reset with /ep setup and /ep reset", ""},
+            {"• Settings reopens after combat", ""},
+        }},
+        {"Version 0.24.0", {
+            {"• New Settings window and in-game Help", ""},
+            {"• Target markers and player shortcuts", ""},
+            {"• Wheel sounds, vibration, and repeat controls", ""},
+        }},
+        {"Version 0.23.0", {
+            {"• Pet Wheel for Hunters and Warlocks", ""},
+            {"• Cooldowns, charges, and wheel tooltips", ""},
+            {"• Mouse wheel paging", ""},
+        }},
+        {"Version 0.22.31", {
+            {"• Assign the wheel key in Settings", ""},
+            {"• Option to remember your last action", ""},
+            {"• More Say and Party messages", ""},
+        }},
+        {"Version 0.22.19", {
+            {"• Spells, items, and macros on the Actions Wheel", ""},
+            {"• Combat wheel for mouse and controller", ""},
+            {"• Reorder entries and Favorites", ""},
+        }},
+    })
 end
 
 local function CreateInterfaceOptions()
@@ -1903,9 +2149,6 @@ local function CreateInterfaceOptions()
     local title = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 16, -16)
     title:SetText("EmotePanel Options")
-    local version = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    version:SetPoint("LEFT", title, "RIGHT", 10, 0)
-    version:SetText("v" .. ns.version)
 
     local setup = mainPanel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     setup:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -16)
@@ -1918,28 +2161,25 @@ local function CreateInterfaceOptions()
     local helpPanel = CreateHelpPanel(canvas)
     local actionPicker = ActionPicker.Create(canvas)
     local categoriesPanel = CreateCategoriesPanel(canvas)
-    local guidePanel = CreateGuidePanel(canvas)
-    for _, page in ipairs({customizationPanel, helpPanel, actionPicker, categoriesPanel, guidePanel}) do
+    local profilesPanel = ns.Profiles.Create(canvas)
+    profilesPanel:SetAllPoints(canvas)
+    local guidePanel = CreateSettingsBook(canvas, "GuidePanel", GuidePages(), {
+        label = "Wheel Keybinds",
+        description = "Open the wheel keybind controls in General.",
+        onClick = function()
+            if OpenSettings("general") then window:FocusEntry(mainPanel, mainPanel.wheelBindingButtons[1]) end
+        end,
+    })
+    local changelogPanel = CreateChangelogPanel(canvas)
+    for _, page in ipairs({customizationPanel, helpPanel, actionPicker, categoriesPanel, guidePanel, changelogPanel}) do
         page:SetAllPoints(canvas)
     end
 
     local resetAddon = Widgets.CreateRedButton(mainPanel, "Reset to Defaults")
     resetAddon:SetSize(128, 24)
     resetAddon:SetPoint("TOPLEFT", gamepadCheck, "BOTTOMLEFT", 0, -22)
-    Widgets.AddSettingsTooltip(resetAddon, "Reset to Defaults", "Restore all EmotePanel defaults for every character and reload the UI. WoW keybinds stay assigned.")
-    resetAddon:SetScript("OnClick", function()
-        Widgets.ShowConfirmation("EMOTEPANEL_RESET_SETTINGS",
-            "Reset EmotePanel for all characters?\n\nThis clears saved settings, custom entries, Favorites, and Action selections, then reloads the UI. WoW keybinds stay assigned.",
-            function()
-                if InCombatLockdown() then
-                    Widgets.ShowError("Reset the addon outside combat.", LE_GAME_ERR_AFFECTING_COMBAT)
-                    return
-                end
-                -- Keep the current settings available until the UI saves them on reload.
-                resetOnLogout = true
-                ReloadUI()
-            end)
-    end)
+    Widgets.AddSettingsTooltip(resetAddon, "Reset to Defaults", "Restore addon defaults in the active profile. Other profiles and WoW keybinds are kept.")
+    resetAddon:SetScript("OnClick", ConfirmResetToDefaults)
 
     local function Refresh()
         mainPanel:RefreshWheelBindings()
@@ -1957,6 +2197,8 @@ local function CreateInterfaceOptions()
     window:AddPage("categories", "Categories", icons .. "INV_Misc_Note_01", categoriesPanel)
     window:AddPage("help", "Entries", icons .. "INV_Misc_Clipboard01", helpPanel)
     window:AddPage("actions", "Actions", icons .. "Spell_Arcane_Arcane01", actionPicker)
+    window:AddPage("profiles", "Profiles", icons .. "INV_Misc_Book_09", profilesPanel)
+    window:AddPage("new", "New", icons .. "INV_Misc_ScrollUnrolled02", changelogPanel)
     window:SelectPage("general")
 
     local launcher = CreateFrame("Frame", nil, UIParent)
@@ -1969,22 +2211,24 @@ local function CreateInterfaceOptions()
     Settings.RegisterAddOnCategory(category)
     EmotePanel.settingsCategoryID = category:GetID()
 
-    window:HookScript("OnHide", function() mainPanel:CancelWheelBindingCapture() end)
+    window:HookScript("OnHide", function()
+        mainPanel:CancelWheelBindingCapture()
+        ns.Profiles.SaveActive()
+    end)
     return mainPanel
-end
-
-local function HandleLogout()
-    if resetOnLogout then
-        EmotePanelSavedVars = nil
-        resetOnLogout = nil
-    end
 end
 
 SettingsUI.CreateInterfaceOptions = CreateInterfaceOptions
 SettingsUI.GAMEPAD_BETA_TIP = GAMEPAD_BETA_TIP
 SettingsUI.OpenSettings = OpenSettings
+SettingsUI.OpenWheelBindingSetup = OpenWheelBindingSetup
+SettingsUI.ConfirmResetToDefaults = ConfirmResetToDefaults
+SettingsUI.ToggleSettings = ToggleSettings
+SettingsUI.SuspendForCombat = SuspendForCombat
+SettingsUI.RestoreAfterCombat = RestoreAfterCombat
 SettingsUI.ShowLoginWarnings = ShowLoginWarnings
+SettingsUI.CheckLoginBindingWarning = CheckLoginBindingWarning
+SettingsUI.WarnMissingWheelBinding = WarnMissingWheelBinding
 SettingsUI.RefreshCategorySettings = RefreshCategorySettings
-SettingsUI.HandleLogout = HandleLogout
 SettingsUI.GetVisibleEntryList = GetVisibleEntryList
 SettingsUI.RefreshEntryList = RefreshEntryList

@@ -88,6 +88,30 @@ end
 local function ExecuteAction(mode, index, data, fromMouse, sector)
     if data.actionType == "submenu" then
         EmotePanel:ShowTargetMarkers()
+    elseif data.actionType == "mount" then
+        local _, _, _, active = C_MountJournal.GetMountInfoByID(data.actionID)
+        FinishOrdinaryAction(sector)
+        if not issecretvalue(active) and active then
+            C_MountJournal.Dismiss()
+        else
+            C_MountJournal.SummonByID(data.actionID)
+        end
+    elseif data.actionType == "companion" then
+        local id = Entries.GetCompanionID(data.actionID, data.profileSpecies)
+        if not id then return end
+        local summoned = C_PetJournal.IsCurrentlySummoned(id)
+        if not issecretvalue(summoned) and summoned then
+            FinishOrdinaryAction(sector)
+            C_PetJournal.DismissSummonedPet(id)
+        else
+            local canSummon, _, reason = C_PetJournal.GetPetSummonInfo(id)
+            if issecretvalue(canSummon) or not canSummon then
+                Widgets.ShowError(not issecretvalue(reason) and reason or "That companion pet cannot be summoned here.")
+                return
+            end
+            FinishOrdinaryAction(sector)
+            C_PetJournal.SummonPetByGUID(id)
+        end
     elseif data.actionType == "emote" then
         local text = Entries.GetCustomEmoteText(data.action)
         if text then
@@ -145,7 +169,7 @@ local function ExecuteAction(mode, index, data, fromMouse, sector)
         ShowUIPanel(ProfessionsFrame)
     elseif Entries.IsSecureWheelAction(data) then
         if InCombatLockdown() then
-            Widgets.ShowError("Use the wheel keybind for spells, items, and macros in combat.", LE_GAME_ERR_AFFECTING_COMBAT)
+            Widgets.ShowError("Use the wheel keybind to use this action in combat.", LE_GAME_ERR_AFFECTING_COMBAT)
         end
     elseif Entries.GetRaidMarker(mode, index, data) then
         ShowRaidMarkerCombatError()
@@ -221,10 +245,17 @@ function EmotePanel:RefreshPetAutocast(selection)
     self:RefreshWheel(selection)
 end
 
+local PING_INPUT_UNITS = {
+    Accept = "target", WheelActivate = "target", LeftButton = "target",
+    PingSelf = "player", MiddleButton = "player",
+}
+Input.PING_INPUT_UNITS = PING_INPUT_UNITS
+
 function EmotePanel:ActivateSector(index, mouseButton, fromMouse)
     local mode, slot, data = Pages.GetSectorEntry(index)
     if not data or (data.available and not data.available()) then return end
     if mode == "pet" then return end -- Pet commands and autocast use secure clicks.
+    if mode == "pings" then return end -- Pings use secure macro clicks.
     if mouseButton == "LeftButton" and InCombatLockdown() and Entries.IsOutOfCombat(mode, slot, data) then
         self:Select(index)
         Widgets.ShowError(data.name .. " is unavailable in combat.", LE_GAME_ERR_AFFECTING_COMBAT)
@@ -295,16 +326,19 @@ function EmotePanel:UpdateSecureWheelInput()
     if self.frame:IsShown() and self:CanUseWheel() then
         for sector = 1, Pages.currentPage.count do
             local mode, key, data = Pages.GetSectorEntry(sector)
-            if data and (Entries.RequiresOutOfCombat(data) or Entries.GetRaidMarker(mode, key, data)) then
+            if data and (Entries.NeedsSecureInput(data) or Entries.GetRaidMarker(mode, key, data)) then
                 local x, y = self.wheel:GetCenter()
                 if not x then break end
                 button = button or self:CreateSecureWheelInput()
                 local pet = Pages.currentPage.mode == "pet"
                 local markers = Pages.currentPage.mode == "targetMarkers"
-                if button:GetAttribute("pet-wheel") ~= pet or button:GetAttribute("target-markers") ~= markers then
+                local pings = Pages.currentPage.mode == "pings"
+                if button:GetAttribute("pet-wheel") ~= pet or button:GetAttribute("target-markers") ~= markers
+                    or button:GetAttribute("ping-wheel") ~= pings then
                     button:Hide()
                     button:SetAttribute("pet-wheel", pet)
                     button:SetAttribute("target-markers", markers)
+                    button:SetAttribute("ping-wheel", pings)
                 end
                 button:SetScale(self.wheel:GetEffectiveScale() / UIParent:GetEffectiveScale())
                 button:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x, y)
@@ -365,7 +399,7 @@ function EmotePanel:SetupWheelMouse(wheel, innerRadius, outerRadius)
         lastX, lastY = nil, nil
         self:SetClearMarkHovered(false)
         mouseDownButton, mouseDownSector, mouseDownPage, mouseDownCategory = nil, nil, nil, nil
-        if self.wheelTooltipFromMouse and GameTooltip:IsOwned(wheel) then GameTooltip:Hide() end
+        if self.wheelTooltipFromMouse then self.wheelTooltip:Hide() end
     end
     local function StartMouseSelection()
         wheel:SetScript("OnUpdate", UpdateMouseSelection)
@@ -380,7 +414,8 @@ function EmotePanel:SetupWheelMouse(wheel, innerRadius, outerRadius)
             mouseDownSector = SectorUnderCursor(mouseButton, GetCursorPosition())
             mouseDownPage = Pages.currentPage
             mouseDownCategory = GetCategoryAt(mouseDownPage, mouseDownSector)
-            if mouseButton == "LeftButton" or (mouseButton == "RightButton" and Pages.currentPage.mode == "pet") then
+            if mouseButton == "LeftButton" or (mouseButton == "MiddleButton" and Pages.currentPage.mode == "pings")
+                or (mouseButton == "RightButton" and Pages.currentPage.mode == "pet") then
                 self:SetWheelPressed(type(mouseDownSector) == "number" and mouseDownSector or nil, mouseButton)
             end
         end
@@ -405,7 +440,7 @@ function EmotePanel:SetupWheelMouse(wheel, innerRadius, outerRadius)
         else
             self:ActivateSector(index, mouseButton, fromMouse)
         end
-        if GameTooltip:IsOwned(wheel) then GameTooltip:Hide() end
+        self.wheelTooltip:Hide()
     end
     local function SetMouseScripts(button)
         button:EnableMouseWheel(true)
@@ -424,9 +459,10 @@ function EmotePanel:SetupWheelMouse(wheel, innerRadius, outerRadius)
         button:HookScript("OnHide", StopMouseSelection)
         button:SetScript("OnMouseDown", MouseDown)
         button:SetScript("OnMouseUp", function(_, mouseButton)
-            -- The pet proxy handles right-click in the secure click context.
+            -- The secure proxy handles self pings and pet autocast clicks.
             if mouseButton ~= "LeftButton"
-                and (button == wheel or mouseButton ~= "RightButton" or Pages.currentPage.mode ~= "pet") then
+                and (button == wheel or not ((mouseButton == "MiddleButton" and Pages.currentPage.mode == "pings")
+                    or (mouseButton == "RightButton" and Pages.currentPage.mode == "pet"))) then
                 FinishClick(TakeMouseClick(mouseButton), mouseButton, true)
             end
         end)
@@ -455,6 +491,8 @@ function EmotePanel:SetupWheelMouse(wheel, innerRadius, outerRadius)
             elseif self:GetAttribute("target-markers") then
                 self:SetBindingClick(true, "PAD3", self:GetName(), "ClearMark")
                 self:SetBindingClick(true, "PAD4", self:GetName(), "MarkSelf")
+            elseif self:GetAttribute("ping-wheel") then
+                self:SetBindingClick(true, "PAD4", self:GetName(), "PingSelf")
             end
         ]])
         button:SetAttribute("_onhide", [[ self:ClearBindings() ]])
@@ -467,6 +505,7 @@ function EmotePanel:SetupWheelMouse(wheel, innerRadius, outerRadius)
             button:SetAttribute("macrotext", nil)
             button:SetAttribute("spell", nil)
             button:SetAttribute("item", nil)
+            button:SetAttribute("toy", nil)
             button:SetAttribute("action", nil)
             button:SetAttribute("marker", nil)
             button:SetAttribute("unit", nil)
@@ -482,12 +521,26 @@ function EmotePanel:SetupWheelMouse(wheel, innerRadius, outerRadius)
             SetRaidMarkerAction(0, SecureCmdOptionParse("[@target,exists] target; player"))
         end
         local clickedSector, ranSecureAction, ranAutocast, controllerPage, autocastPage, clearPage, selfMarkPage
-        button:HookScript("OnHide", function() controllerPage, autocastPage, clearPage, selfMarkPage = nil, nil, nil, nil end)
+        local pingPage, pingInput
+        button:HookScript("OnHide", function()
+            controllerPage, autocastPage, clearPage, selfMarkPage = nil, nil, nil, nil
+            pingPage, pingInput = nil, nil
+        end)
         button:SetScript("PreClick", function(_, input, down)
             clickedSector, ranSecureAction, ranAutocast = nil, false, false
             if InCombatLockdown() then return end
             ClearAction()
+            local isPing = Pages.currentPage.mode == "pings"
+            local pingUnit = isPing and PING_INPUT_UNITS[input]
+            local pingGamepad = isPing and (input == "WheelActivate" or input == "PingSelf")
             if down then
+                if pingGamepad then
+                    if not IsModifierKeyDown() then
+                        pingPage, pingInput = Pages.currentPage, input
+                        self:SetWheelPressed(self.selected, input)
+                    end
+                    return
+                end
                 if input == "WheelActivate" then controllerPage = Pages.currentPage end
                 if input == "WheelAutocast" then autocastPage = Pages.currentPage end
                 if input == "ClearMark" then clearPage = Pages.currentPage end
@@ -500,6 +553,34 @@ function EmotePanel:SetupWheelMouse(wheel, innerRadius, outerRadius)
                 return
             end
             self:SetWheelPressed(nil, input)
+            if pingUnit then
+                if pingGamepad then
+                    local matches = pingPage == Pages.currentPage and pingInput == input
+                    pingPage, pingInput = nil, nil
+                    self.gamepadInput:SetPropagateKeyboardInput(false)
+                    if not matches or IsModifierKeyDown() then return end
+                    if input == "WheelActivate" and GetBindingFromClick("PAD1") == "TOGGLEGAMEMENU" then
+                        self.frame:Hide()
+                        return
+                    end
+                    clickedSector = self.selected
+                else
+                    clickedSector = TakeMouseClick(input)
+                end
+                local _, _, data = Pages.GetSectorEntry(clickedSector)
+                if not (data and self.frame:IsShown() and self:CanUseWheel()) then return end
+                local command = Entries.GetPingCommand()
+                local condition = "[@" .. pingUnit .. ",exists]"
+                if not command then return end
+                if SecureCmdOptionParse(condition .. " 1; 0") ~= "1" then
+                    Widgets.ShowError(ERR_GENERIC_NO_TARGET)
+                    return
+                end
+                button:SetAttribute("type", "macro")
+                button:SetAttribute("macrotext", command .. " " .. condition .. " " .. data.actionID)
+                ranSecureAction = true
+                return
+            end
             local pressedPage, pressedAutocastPage = controllerPage, autocastPage
             if input == "WheelActivate" then
                 controllerPage = nil
@@ -582,6 +663,10 @@ function EmotePanel:SetupWheelMouse(wheel, innerRadius, outerRadius)
                 button:SetAttribute("type", "item")
                 button:SetAttribute("item", "item:" .. data.actionID)
                 ranSecureAction = true
+            elseif data.actionType == "toy" then
+                button:SetAttribute("type", "toy")
+                button:SetAttribute("toy", data.actionID)
+                ranSecureAction = true
             elseif data.actionType == "pet" or (data.actionType == "action" and Entries.HasExtraAction()) then
                 button:SetAttribute("type", data.actionType)
                 button:SetAttribute("action", data.actionID)
@@ -592,13 +677,13 @@ function EmotePanel:SetupWheelMouse(wheel, innerRadius, outerRadius)
             if not InCombatLockdown() then ClearAction() end
             if ranAutocast then
                 self:RefreshPetAutocast(clickedSector)
-                if GameTooltip:IsOwned(wheel) then GameTooltip:Hide() end
+                self.wheelTooltip:Hide()
             elseif ranSecureAction then
                 if clickedSector then
                     self:RememberAction(clickedSector)
                     self:Select(clickedSector)
                 end
-                if GameTooltip:IsOwned(wheel) then GameTooltip:Hide() end
+                self.wheelTooltip:Hide()
                 CloseAfterAction()
             else
                 FinishClick(clickedSector, "LeftButton", input == "LeftButton")
@@ -713,7 +798,7 @@ function EmotePanel:SetupGamepad()
         end
     end
     local function RunAction(action, pages)
-        if GameTooltip:IsOwned(self.wheel) then GameTooltip:Hide() end
+        self.wheelTooltip:Hide()
         return action(pages)
     end
     local function BindGamepadButtons(target, visibilityOwner)
@@ -729,7 +814,8 @@ function EmotePanel:SetupGamepad()
         local function UseSecureBinding(key)
             local mode = Pages.currentPage.mode
             return (key == "PAD1" or (key == "PAD3" and mode == "pet")
-                or ((key == "PAD3" or key == "PAD4") and mode == "targetMarkers"))
+                or ((key == "PAD3" or key == "PAD4") and mode == "targetMarkers")
+                or (key == "PAD4" and mode == "pings"))
                 and self.secureWheelInput and self.secureWheelInput:IsShown()
         end
         target:SetScript("OnGamePadButtonDown", function(_, key)
@@ -865,7 +951,8 @@ end
 function EmotePanel:ToggleWheel(pet)
     local frame = self.frame
     pet = pet == true
-    if not frame or self.combatView or (pet and (not self.supportsPetWheel or InCombatLockdown())) then return end
+    if not frame or self.combatView or (GameMenuFrame and GameMenuFrame:IsShown())
+        or (pet and (not self.supportsPetWheel or InCombatLockdown())) then return end
     if pet and not (frame:IsShown() and Pages.currentPage.mode == "pet") then
         if not Entries.HasSummonedPet() then
             Widgets.ShowError("No pet summoned")
@@ -986,7 +1073,7 @@ local function HandleCombatTransition(event)
         end
         EmotePanel:RefreshCombatAppearance()
         EmotePanel:RefreshActionCooldowns()
-        EmotePanel:RefreshActionRanges()
+        EmotePanel:RefreshActionAvailability()
         EmotePanel:RefreshGamepadHint()
     end
 end
