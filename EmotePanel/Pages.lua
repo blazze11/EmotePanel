@@ -81,6 +81,7 @@ local function BuildCategoryPages()
             table.insert(categoryPages, pageIndex, {
                 mode = mode,
                 category = category,
+                number = number,
                 first = dedicatedPage and 1 or first,
                 entries = dedicatedPage and {leaveGroup} or entries,
                 count = dedicatedPage and 1 or math.min(ns.SECTOR_COUNT, #entries - first + 1),
@@ -318,6 +319,58 @@ local function MakeCategoryWheel()
     return { mode = "categories", title = "Categories", entries = entries, count = #entries }
 end
 
+local function FindSector(page, mode, key)
+    if key == nil then return end
+    for sector = 1, page.count do
+        local entryMode, entryKey, data = GetSectorEntry(sector, page)
+        if data and entryMode == mode and entryKey == key then return sector end
+    end
+end
+
+function EmotePanel:RestoreCombatPage(selection, origin)
+    local previous = Pages.currentPage
+    local category = previous.category or previous.mode
+    local mode, key = GetSectorEntry(selection, previous)
+    local offset = previous.number and previous.number - 1 or math.floor(((previous.first or 1) - 1) / ns.SECTOR_COUNT)
+
+    Entries.ReadPetActions()
+    Entries.RefreshCarriedActionItems()
+    Entries.ReadAutomaticActions()
+    BuildPetPages()
+    BuildCategoryPages()
+    RefreshProfessionPage()
+    RefreshVisibleFavorites()
+    if IsCategoryWheelEnabled() then Pages.categoryWheel = MakeCategoryWheel() end
+    markerOrigin = origin and origin.mode
+
+    if category == "categories" then
+        self:DisplayPage(nil, Pages.categoryWheel, FindSector(Pages.categoryWheel, mode, key))
+    elseif category == "targetMarkers" then
+        self:ShowPage(TARGET_MARKER_START, FindSector(targetMarkerPage, mode, key))
+    else
+        local first, last = GetCategoryPageRange(category)
+        if category == "pet" then first, last = -#petPages, -1 end
+        if first then
+            if key ~= nil then
+                for index = first, last do
+                    local sector = FindSector(GetPage(index), mode, key)
+                    if sector then
+                        self:ShowPage(index, sector)
+                        return
+                    end
+                end
+            end
+            local reverse = category == "macros" or category == "pet"
+            self:ShowPage(reverse and math.max(first, last - offset) or math.min(last, first + offset))
+        elseif IsCategoryWheelEnabled() and Entries.categoryByID[category] then
+            local _, empty = GetCategoryDestination(Entries.categoryByID[category])
+            self:DisplayPage(nil, empty)
+        else
+            self:ShowStartPage()
+        end
+    end
+end
+
 function EmotePanel:ShowStartPage(resume, navigation)
     if self.combatView then return end
     markerOrigin = nil
@@ -383,7 +436,7 @@ function EmotePanel:BackOrClose()
                 local page = GetPage(index)
                 for sector = 1, page.count do
                     local _, _, data = GetSectorEntry(sector, page)
-                    if data.actionType == "submenu" then
+                    if data and data.actionType == "submenu" then
                         self:ShowPage(index, sector, true)
                         return
                     end

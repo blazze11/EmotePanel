@@ -38,6 +38,8 @@ local settings = {
     {"showKeybindLegend", "Appearance", "Keybind legend", "boolean", true},
     {"showLegendHint", "Appearance", "Legend hint", "boolean", true},
     {"showWheelTooltips", "Appearance", "Wheel tooltips", "boolean", false},
+    {"tintWheelSegments", "Appearance", "Tint wheel segments", "boolean", true},
+    {"wheelTintStrength", "Appearance", "Tint strength", "number", ns.Wheel.DEFAULT_TINT_STRENGTH, 0, 100, 1},
     {"macroCooldowns", "Appearance", "Action cooldowns", "boolean", true},
     {"wheelSounds", "Appearance", "Wheel sounds", "boolean", true},
     {"wheelVibration", "Appearance", "Vibration", "boolean", false},
@@ -303,7 +305,10 @@ local function ValidOperation(op)
     if op.kind == "setting" then
         local spec = settingByKey[op.field]
         if not spec or type(value) ~= spec[4] then return false end
-        if spec[4] == "number" then return value >= spec[6] and value <= spec[7] and (op.field == "minimapAngle" or value % 10 == 0) end
+        if spec[4] == "number" then
+            local step = spec[8] or 10
+            return value >= spec[6] and value <= spec[7] and (op.field == "minimapAngle" or value % step == 0)
+        end
         if spec[4] == "string" then return value == "auto" or Widgets.GLYPH_STYLES[value] ~= nil end
         return true
     elseif op.kind == "position" then

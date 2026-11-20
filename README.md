@@ -11,9 +11,11 @@ Use `/ep reset` to confirm restoring the active profile to addon defaults.
 
 ## Get started
 
-1. Download the Forever ZIP and extract `EmotePanel` into `World of Warcraft/_forever_/Interface/AddOns/`. [GitHub Releases](https://github.com/blazze11/EmotePanel/releases) · [CurseForge](https://www.curseforge.com/wow/addons/emote-panel/files)
+1. Install with [WowUp](https://wowup.io/addons/2798003) or [CurseForge](https://www.curseforge.com/wow/addons/emote-panel/files). For a manual install, download the [Forever ZIP from GitHub](https://github.com/blazze11/EmotePanel/releases) and extract `EmotePanel` into `World of Warcraft/_forever_/Interface/AddOns/`.
 2. Type `/ep setup` and press a key or controller button for the main wheel. Use **Wheel Keybinds** in **Help → Start Here** to reach the main and Pet Wheel keybinds in General.
 3. Use your assigned keybind to open the wheel. Open **Actions** in Settings to add spells, items, and macros.
+
+An open main wheel or Pet Wheel stays open when combat ends. You can keep using it as soon as WoW allows the selected action.
 
 | Action | Controller | Mouse |
 | --- | --- | --- |

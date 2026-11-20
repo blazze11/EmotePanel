@@ -1,5 +1,12 @@
 # EmotePanel changelog
 
+## 0.26.0 for WoW: Forever
+
+- The main wheel and Pet Wheel stay open when combat ends.
+- Animated icon rings and matching colors for target markers and pings.
+- Find **Tint wheel segments** and **Tint strength** under **Customization → Display and feedback**.
+- Fixed actions canceled by unrelated button releases in combat.
+
 ## 0.25.0 for WoW: Forever
 
 - **In-game changelog.** The load message shows the addon version. Type `/ep new` or select **New** in Settings to see release highlights.

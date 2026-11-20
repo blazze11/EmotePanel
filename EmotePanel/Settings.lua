@@ -8,10 +8,12 @@ local Pages = ns.Pages
 local Wheel = ns.Wheel
 local Input = ns.Input
 local SettingsUI = ns.SettingsUI
+local suspendedPage
 
 local function OpenSettings(page)
     local window = EmotePanel.settingsWindow
     if not window or EmotePanel.combatView or InCombatLockdown() then return end
+    suspendedPage = nil
     EmotePanel.frame:Hide()
     if SettingsPanel:IsShown() then HideUIPanel(SettingsPanel) end
     window:SelectPage(page or "general")
@@ -27,7 +29,6 @@ local function OpenWheelBindingSetup()
     if OpenSettings("general") then EmotePanel.optionsPanel:StartWheelBindingCapture(1) end
 end
 
-local suspendedPage
 local function SuspendForCombat()
     local window = EmotePanel.settingsWindow
     if window:IsShown() then
@@ -36,8 +37,14 @@ local function SuspendForCombat()
     end
 end
 
-local function RestoreAfterCombat()
-    if suspendedPage and OpenSettings(suspendedPage) then suspendedPage = nil end
+local function RestoreAfterCombat(defer)
+    if not suspendedPage or EmotePanel.frame:IsShown() or EmotePanel.combatView or InCombatLockdown() then return end
+    if defer then
+        -- A wheel switch hides one wheel and opens the other in the same input event.
+        C_Timer.After(0, RestoreAfterCombat)
+    else
+        OpenSettings(suspendedPage)
+    end
 end
 
 local function ToggleSettings()
@@ -962,7 +969,49 @@ local function CreateCustomizationPanel(mainPanel)
     vibrationLabel:SetText("Wheel vibration")
     Widgets.AddSettingsTooltip(vibrationCheck, "Wheel vibration", "Feel a short pulse when the stick or D-pad moves to a new wheel segment.", vibrationLabel)
 
-    local position = CreatePositionControls(panel, soundCheck)
+    local tintCheck = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+    tintCheck:SetSize(24, 24)
+    tintCheck:SetPoint("TOPLEFT", soundCheck, "BOTTOMLEFT", 0, -8)
+    local tintLabel = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    tintLabel:SetPoint("LEFT", tintCheck, "RIGHT", 4, 0)
+    tintLabel:SetText("Tint wheel segments")
+    Widgets.AddSettingsTooltip(tintCheck, "Tint wheel segments", "Tint unselected segments and their icon rings on both wheels.", tintLabel)
+
+    local tintStrength = CreateFrame("Frame", AddonName .. "TintStrength", panel, "MinimalSliderWithSteppersTemplate")
+    tintStrength:SetSize(200, 20)
+    tintStrength:SetPoint("LEFT", tintLabel, "RIGHT", 16, 0)
+    tintStrength:Init(Wheel.DEFAULT_TINT_STRENGTH, 0, 100, 100)
+    tintStrength.Slider:SetObeyStepOnDrag(true)
+    local tintTip = "Adjust tints on all wheels. At 100%, segments reach 50% tint opacity and idle rings blend 25% toward the highlight color."
+    local tintValue = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    tintValue:SetPoint("LEFT", tintStrength, "RIGHT", 8, 0)
+    Widgets.AddSettingsTooltip(tintStrength, "Tint strength", tintTip, tintValue)
+    Widgets.AddSettingsTooltip(tintStrength.Slider, "Tint strength", tintTip)
+    function tintStrength:StepSetting(direction)
+        self:SetValue(self.Slider:GetValue() + direction)
+    end
+
+    local refreshingTint
+    tintStrength:RegisterCallback(MinimalSliderWithSteppersMixin.Event.OnValueChanged, function(_, value)
+        if refreshingTint or not tintStrength:IsSliderEnabled() then return end
+        local strength = Wheel.RoundOffset(value)
+        EmotePanelSavedVars.wheelTintStrength = strength
+        tintValue:SetText(("%d%%"):format(strength))
+        EmotePanel:RefreshCombatAppearance()
+    end, tintStrength)
+
+    local function RefreshTintEnabled()
+        local enabled = EmotePanelSavedVars.tintWheelSegments ~= false
+        tintStrength:SetEnabled(enabled)
+        tintValue:SetAlpha(enabled and 1 or 0.55)
+    end
+    tintCheck:SetScript("OnClick", function(self)
+        EmotePanelSavedVars.tintWheelSegments = not not self:GetChecked()
+        RefreshTintEnabled()
+        EmotePanel:RefreshCombatAppearance()
+    end)
+
+    local position = CreatePositionControls(panel, tintCheck)
     local overrides = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
     overrides:SetPoint("TOPLEFT", position, "BOTTOMLEFT", 0, -15)
     overrides:SetText("Entry overrides")
@@ -976,8 +1025,15 @@ local function CreateCustomizationPanel(mainPanel)
         legendHint:SetChecked(EmotePanelSavedVars.showLegendHint ~= false)
         cooldownCheck:SetChecked(EmotePanelSavedVars.macroCooldowns ~= false)
         tooltipCheck:SetChecked(EmotePanelSavedVars.showWheelTooltips == true)
+        tintCheck:SetChecked(EmotePanelSavedVars.tintWheelSegments ~= false)
         soundCheck:SetChecked(EmotePanelSavedVars.wheelSounds ~= false)
         vibrationCheck:SetChecked(EmotePanelSavedVars.wheelVibration == true)
+        local strength = Wheel.GetTintStrength()
+        refreshingTint = true
+        tintStrength:SetValue(strength)
+        refreshingTint = nil
+        tintValue:SetText(("%d%%"):format(strength))
+        RefreshTintEnabled()
         self:refreshPosition()
     end
     panel.OnRefresh = Refresh
@@ -1765,11 +1821,11 @@ local function GuidePages()
     return {
         {"Start Here", {
             {"Set up your wheel keybinds",
-                "Choose Wheel Keybinds to assign keys for the main wheel and, on a Hunter or Warlock, the Pet Wheel. Type {/ep setup} outside combat to assign the primary Wheel Keybind directly."},
+                "Choose Wheel Keybinds for the main and Pet Wheels. Type {/ep setup} outside combat to assign the primary Wheel Keybind directly. Use Tint wheel segments and Tint strength in Customization to adjust the idle colors on both wheels."},
             {"Gamepad keybinds",
                 "Select a keybind slot and press the button you want to assign. On the wheel, use either stick to highlight a segment, or press D-pad up or down to move one segment at a time.\n\n"
                 .. "From Categories, use the left shoulder button to open Actions. Add abilities, items, or macros in the Actions settings tab first. Each type has its own highlight color. Use Back to return, or use the right shoulder button from the first Actions page when paging can wrap.\n\n"
-                .. "With a segment highlighted, use the buttons above to open or use it, edit it, or add or remove it from Favorites.",
+                .. "With a segment highlighted, use the buttons above to open or use it, edit it, or add or remove it from Favorites. Outside combat, the glowing ring follows your selection while you hold Confirm.",
                 "{PAD1} Open / Use    {PAD4} Edit    {PAD3} Favorite    {PAD2} Back"},
             {"Mouse and keyboard",
                 "Click a keybind slot, then press the key you want to assign. On the wheel, left-click to open or use a segment, right-click to edit it, and middle-click to add or remove it from Favorites. Scroll up from Categories to open Actions. Use your assigned keybind to open the wheel. To open or close settings, type {/ep} or left-click the minimap icon or EmotePanel in the Addon Compartment. The New tab shows release notes.",
@@ -1796,7 +1852,7 @@ local function GuidePages()
         {"Categories - Utilities", {
             {"Professions", "Opens professions your character has learned. Available outside combat.\nExamples: Alchemy, Blacksmithing, Cooking, Fishing"},
             {"Target Marker", "Marks your target or your own character. Open it from Categories or Commands.\nExamples: Mark Skull, Mark Cross, Mark Moon, Mark Star"},
-            {"Ping System", "Enable it in Categories to send Attack, Warning, Assist, and other group pings.", "{PAD1} Target    {PAD4} Self    {PAD2} Close"},
+            {"Ping System", "Enable it in Categories to send group pings. Each ping's segment and icon ring match its icon color.", "{PAD1} Target    {PAD4} Self    {PAD2} Close"},
             {"Gamepad", "", "{PADLSTICKAXIS} or {DIRPADVERTICAL} Highlight    {PAD1} Open or use    {PAD2} Return"},
             {"Mouse and keyboard", "", "{MOUSELEFT} Open or use    {MOUSERIGHT} the center to return"},
         }},
@@ -1815,7 +1871,8 @@ local function GuidePages()
             {"Add actions to the wheel",
                 "1. Open Actions in Settings. Choose Abilities, Items, Macros, Mounts, Companion Pets, or Toy Box.\n"
                 .. "2. Check an entry to add it. Uncheck it to remove it. Try adding a potion or a mount.\n"
-                .. "3. Open the main wheel with your assigned keybind. From Categories, open Actions and use the entry you added. Use your wheel keybind in combat."
+                .. "3. Open the main wheel with your assigned keybind. From Categories, open Actions and use the entry you added. Use your wheel keybind in combat.\n"
+                .. "4. If combat ends with the wheel open, keep using it. Mounts become available when combat ends. Press again if you started a press before the transition."
             },
             {"Gamepad", "", "{DIRPADHORIZONTAL} Switch lists    {PAD1} Check an entry or use it on the wheel    {PADLSHOULDER} Open Actions from Categories"},
             {"Mouse and keyboard", "Choose a list and check an entry. Scroll up from Categories to open Actions, then click the entry to use it.", "{MOUSELEFT}"},
@@ -1851,7 +1908,7 @@ local function GuidePages()
             {"Use pet commands",
                 "1. If you play a Hunter or Warlock, assign a Pet Keybind on the General tab.\n"
                 .. "2. Summon a living pet and press that binding. Pick a command such as Follow and use it.\n"
-                .. "3. To toggle autocast, highlight a pet ability that supports it and use the autocast control."},
+                .. "3. To toggle autocast, highlight a pet ability that supports it and use the autocast control. Enabled autocast pulses amber. Active commands and stances pulse green. The Pet Wheel stays open when combat ends while your pet is still alive and summoned."},
             {"Gamepad", "", "{PAD1} Use a pet command    {PAD3} Toggle autocast"},
             {"Mouse and keyboard",
                 "Left-Click to use a pet command. Right-Click a supported pet ability to toggle autocast.",
@@ -1860,7 +1917,7 @@ local function GuidePages()
         {"Target Markers", {
             {"Mark a target",
                 "1. Open Target Marker from Categories or Commands. Use your assigned wheel keybind to open the wheel in combat.\n"
-                .. "2. Highlight a mark such as Skull. Apply it to your target or use Mark Self to put it on your character.\n"
+                .. "2. Highlight a mark to brighten its segment. Apply it to your target, or use Mark Self.\n"
                 .. "3. Use Clear Mark to remove the mark from your target. With no target selected, Clear Mark removes your own mark."},
             {"Gamepad", "", "{PAD1} Mark target    {PAD4} Mark self    {PAD3} Clear mark"},
             {"Mouse and keyboard",
@@ -1890,7 +1947,7 @@ local function GuidePages()
         }},
         {"Slash Commands", {
             {"Mouse and keyboard", "Open chat, type a command, and press Enter."},
-            {"/ep or /emotepanel", "Open or close EmotePanel Settings. If combat closes Settings, it reopens on the same tab afterward."},
+            {"/ep or /emotepanel", "Open or close EmotePanel Settings. If combat closes Settings, it reopens on the same tab once combat ends and the wheel is closed."},
             {"/ep config", "Open Settings on the General tab."},
             {"/ep setup", "Open the primary wheel keybind dialog outside combat."},
             {"/ep list", "Open Entries on Favorites."},
@@ -1902,7 +1959,7 @@ local function GuidePages()
             {"/ep categories", "Choose and arrange categories."},
             {"/ep reset", "Confirm a full reset of the active profile to addon defaults. Opens General after the reset."},
             {"/ep debug", "Check whether combat logging is on."},
-            {"/ep debug on or /ep debug off", "Turn combat logging on or off for this session."},
+            {"/ep debug on or /ep debug off", "Turn combat logging on or off for this session. If an action fails, capture the Input and Secure click lines and any on-screen error."},
             {"/ep help or /ep scroll", "Open this guide."},
             {"/ep new", "Open the New tab to read release notes."},
         }},
@@ -2105,6 +2162,12 @@ end
 local function CreateChangelogPanel(parent)
     -- These are the player-facing highlights from CHANGELOG.md.
     return CreateSettingsBook(parent, "NewPanel", {
+        {"Version 0.26.0", {
+            {"• Both wheels stay open when combat ends", ""},
+            {"• Animated icon rings and colors for target markers and pings", ""},
+            {"• Find wheel tints under Customization → Display and feedback", ""},
+            {"• Fixed actions canceled by unrelated button releases in combat", ""},
+        }},
         {"Version 0.25.0", {
             {"• Character profiles and sharing", ""},
             {"• Mounts, companion pets, and toys in Actions", ""},

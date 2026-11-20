@@ -621,7 +621,7 @@ function EmotePanel:SetupWheelMouse(wheel, innerRadius, outerRadius)
                 clickedSector = self.selected
             elseif toggleAutocast and pressedAutocastPage == Pages.currentPage and not IsModifierKeyDown() then
                 clickedSector = self.selected
-            elseif input == "WheelActivate" and (not pressedPage or pressedPage == Pages.currentPage)
+            elseif input == "WheelActivate" and pressedPage == Pages.currentPage
                 and not IsModifierKeyDown() then
                 if GetBindingFromClick("PAD1") == "TOGGLEGAMEMENU" then
                     self.frame:Hide()
@@ -875,8 +875,11 @@ function EmotePanel:SetupGamepad()
                     return false
                 end
                 if activationCategory and action == GetAction(key) then
-                    self:CombatDebug("Input", "A/Cross opening category", activationCategory)
-                    self:ActivateSector(activationSector, "LeftButton")
+                    -- A rebuilt Categories page may reset selection while the button is held.
+                    local sector = activationSector
+                    if activationPage == Pages.currentPage then sector = self.selected end
+                    self:CombatDebug("Input", "A/Cross opening category", GetCategoryAt(Pages.currentPage, sector))
+                    self:ActivateSector(sector, "LeftButton")
                     return false
                 end
             end
@@ -908,6 +911,7 @@ function EmotePanel:SetupGamepad()
             end
             if not isActive then
                 self:SetWheelPressed(nil, "PAD1")
+                self:SetWheelPressed(nil, "WheelActivate")
                 ClearButtons()
             end
         end)
@@ -1049,13 +1053,15 @@ end
 local function HandleCombatTransition(event)
     EmotePanel:SetWheelPressed(nil)
     if event == "PLAYER_REGEN_ENABLED" then
-        if EmotePanel.supportsPetWheel then
-            Entries.ReadPetActions()
-            Pages.BuildPetPages()
-        end
         if not EmotePanel.gamepadReady then EmotePanel:SetupGamepad() end
         EmotePanel:SetupEditorGamepad()
-        EmotePanel:LoadPosition()
+        if not EmotePanel:ResumeCombatWheel() then
+            if EmotePanel.supportsPetWheel then
+                Entries.ReadPetActions()
+                Pages.BuildPetPages()
+            end
+            EmotePanel:LoadPosition()
+        end
         RestoreConsolePortCursor()
     else
         if EmotePanel.gamepadInput then EmotePanel.gamepadInput.CancelNavigationRepeat() end

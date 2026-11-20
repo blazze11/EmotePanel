@@ -38,7 +38,7 @@ function EmotePanel:BuildCombatLayout()
     local function AddPage(id, source)
         local page = Pages.GetPageNavigation(id, source)
         page.mode, page.category = source.mode, source.category
-        page.first, page.count, page.title = source.first, source.count, source.title
+        page.first, page.number, page.count, page.title = source.first, source.number, source.count, source.title
         page.snapshot, page.actions = {}, {}
         for sector = 1, source.count do
             local mode, key, data = Pages.GetSectorEntry(sector, source, true)
@@ -164,17 +164,50 @@ function EmotePanel:ShowCombatPage(index, selection, navigation)
     if changedPage then self:AnimateWheelPage(navigation) end
 end
 
-function EmotePanel:CloseCombatDisplay()
-    if not self.combatView then return end
-    self.frame:Hide()
+local function ReleaseCombatDisplay(self)
     self.combatView = nil
     table.insert(UISpecialFrames, self.frame:GetName())
     if self.gamepadInput then self.gamepadInput:Show() end
+end
+
+function EmotePanel:CloseCombatDisplay()
+    if not self.combatView then return end
+    self.frame:Hide()
+    ReleaseCombatDisplay(self)
     if not InCombatLockdown() then self:LoadPosition() end
     self:ShowStartPage()
     Pages.HandleAutomaticActionsChanged()
-    -- The secure state driver can close the wheel after PLAYER_REGEN_ENABLED.
     ns.SettingsUI.RestoreAfterCombat()
+end
+
+function EmotePanel:ResumeCombatWheel()
+    if not self.combatView or InCombatLockdown() then return end
+    -- Release the combat controls without hiding the shared display.
+    local input = self.combatInput
+    local pressed = input:GetAttribute("press-target")
+    local selection = type(pressed) == "number" and pressed or self.selected
+    local origin = self.combatPages[input:GetAttribute("submenu-origin")]
+    input:Hide()
+    ClearOverrideBindings(input)
+    for _, attribute in ipairs({"press-page", "press-target", "press-button", "legend-pressed", "submenu-origin", "submenu-sector"}) do
+        input:SetAttribute(attribute, nil)
+    end
+    self:StopWheelMouseTooltip()
+    self.wheelTooltip:Hide()
+    self:SetWheelPressed(nil)
+    if Pages.currentPage.mode == "pet" then
+        local dead = UnitIsDead("pet")
+        if not Entries.HasSummonedPet() or (not issecretvalue(dead) and dead) then
+            self:CloseCombatDisplay()
+            return
+        end
+    end
+
+    ReleaseCombatDisplay(self)
+    self:RestoreCombatPage(selection, origin)
+    self:LoadPosition()
+    self:CombatDebug("Wheel", "combat ended", Pages.currentPage.title)
+    return true
 end
 
 function EmotePanel:ActivateCombatSector(sector, fromMouse)
@@ -357,15 +390,23 @@ local PRE_CLICK = [[
         if type(target) == "number" then self:CallMethod("DrawPress", button, target) end
         return
     end
+    local pressedButton = self:GetAttribute("press-button")
+    if pressedButton and pressedButton ~= button then
+        self:CallMethod("DebugClick", "Input", "Ignored release", button, "waiting for " .. pressedButton, "page " .. page)
+        return
+    end
     local pressedTarget = self:GetAttribute("press-target")
-    local pressed = self:GetAttribute("press-page") == page and self:GetAttribute("press-button") == button
+    local pressed = pressedButton == button and self:GetAttribute("press-page") == page
     if button == "Accept" or button == "PetAutocast" or markSelf or selectPing then target = pressedTarget end
     self:SetAttribute("press-page", nil)
     self:SetAttribute("press-target", nil)
     self:SetAttribute("press-button", nil)
     self:CallMethod("DrawPress", button)
     if not target or not pressed or pressedTarget ~= target or (toggleAutocast and type(target) ~= "number") then
-        if button == "Accept" then self:CallMethod("DebugClick", "Input", "A/Cross canceled", "page " .. page) end
+        if button == "Accept" or mouseClick then
+            local reason = not pressed and "no matching press" or not pressedTarget and "no sector pressed" or "pointer moved"
+            self:CallMethod("DebugClick", "Input", "Canceled release", button, reason, "page " .. page)
+        end
         return
     end
 
@@ -561,7 +602,7 @@ local function CreateCombatInput(self)
         menu:Show()
     end
     button:SetAttribute("_onstate-combat", [[
-        if newstate ~= "combat" then self:RunAttribute("close-wheel") end
+        if newstate == "peace" and self:IsShown() then self:CallMethod("ResumeDisplay") end
     ]])
     button:SetAttribute("_onstate-pet", [[
         if newstate ~= "alive" and self:IsShown() and self:GetAttribute("pet-wheel") then
@@ -574,6 +615,7 @@ local function CreateCombatInput(self)
         EmotePanel:ShowCombatPage(page, sector, navigation)
     end
     function button:CloseDisplay() EmotePanel:CloseCombatDisplay() end
+    function button:ResumeDisplay() EmotePanel:ResumeCombatWheel() end
     function button:DrawSelection(sector, showTooltip, dpad)
         EmotePanel:Select(sector, showTooltip, dpad and SOUNDKIT.GAMEPAD_RADIAL_MENU_TAB_OVER, dpad)
     end

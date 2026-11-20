@@ -1,4 +1,4 @@
-# EmotePanel 0.25.0 (development)
+# EmotePanel 0.26.0 (development)
 
 For WoW: Forever 1.60.1 (interface 16001). Type `/ep setup` outside combat and
 press a key or controller button to assign your primary **Wheel Keybind**.
@@ -10,8 +10,10 @@ the next time the addon loads outside combat.
 
 The main wheel and Pet Wheel briefly fade in and out. Closing releases wheel
 input immediately while the artwork fades.
-Selection changes immediately. Paging briefly fades in the new icons and
-title while the new page is already active. Both wheels use WoW's radial
+Selection changes immediately. Pressing an action sends a short pulse in the
+segment's highlight color around its icon ring. On the regular wheel, the
+ring follows your selection while you hold A/Cross. Paging briefly fades in
+the new icons and title while the new page is already active. Both wheels use WoW's radial
 menu sounds when opening, closing, changing selection, or paging. **Wheel sounds**
 on the **Customization** tab in `/ep config` is on by default and takes effect immediately.
 D-pad steps use the paging sound. The cues follow WoW's Sound Effects volume.
@@ -82,7 +84,7 @@ available. Individual emotes keep distinct WoW icons because Blizzard's
 emote wheel uses one shared icon. The selected entry's name appears between
 the wheel and footer. Emotes, Say Chat, and Party Chat follow WoW’s chat
 colors. Favorites are gold, Voiced Emotes are rose, Commands are purple,
-Game Panels are teal, Target Markers are red, Player Interactions are
+Game Panels are teal, the Target Marker shortcut is red, Player Interactions are
 olive green, and Professions are amber. Actions use blue for spells, bright green for
 items, magenta for macros, and yellow-green for the extra action button.
 Custom icons follow their entry
@@ -100,7 +102,9 @@ and in the flat layout. **Backpack** toggles all bags from
 the combat wheel open. A rejected emote shows a message.
 
 **Commands** starts with **Backpack**. Open **Target Marker**
-from Categories or Commands. Highlight one of the eight marks and press
+from Categories or Commands. Each icon ring and highlight matches its mark's
+WoW color. **Tint wheel segments** also shows those colors on unselected
+segments by default. Highlight one of the eight marks and press
 **A/Cross** or left-click to mark your target. Press **Y/Triangle** to put
 the highlighted mark on your own character.
 Press **X/Square** or click the **Clear Mark** icon in the center to clear
@@ -114,6 +118,8 @@ If you have a custom Commands order, **Reset Order** in
 
 Enable **Ping System** in Categories or page to it in the Favorites-first
 layout. Highlight Attack, Warning, On My Way, Assist, Look, or Threat.
+Each ping's icon ring, highlight, and press pulse match its icon color. With
+**Tint wheel segments** on, the unselected segments pick up these colors too.
 Press **A/Cross** or left-click to ping your current target. Press **Y/Triangle**
 or middle-click to ping yourself. **B/Circle** or right-clicking the center
 closes the wheel.
@@ -142,15 +148,18 @@ closing it. With the lock off, the stick can move your character while
 you use the wheel. That movement can interrupt casts or channels.
 
 Combat uses the wheel layout and saved macro text loaded before the fight.
-Changes take effect after combat. If an item runs out mid-fight, its icon
-disappears and the surrounding sectors keep their positions until combat ends.
-WoW still applies the usual combat rules to each action.
+If an item runs out mid-fight, its icon disappears and the surrounding
+sectors keep their positions until combat ends. Both wheels stay open at
+combat end and switch to their live layouts, preserving the open page and
+selection where possible. Press again if an action was held during the
+transition. You can select your mount as soon as WoW allows mounting.
 
 To diagnose a wheel input problem, enter **`/ep debug on`** and reproduce it
-using the wheel keybind. In chat, **EmotePanel debug** groups lines under
-labels such as **Input**, **Wheel**, **Secure click**, and **Emote**. The **Input** lines include regular wheel category presses and controller activation.
-A secure click entry includes the action type, page, sector, and whether
-the movement stick was held. WoW still decides whether the action succeeds.
+using the wheel keybind. Capture the **Input** and **Secure click** lines
+along with any red on-screen error. **Input** includes combat releases the
+wheel ignored or canceled. **Secure click** records the action type, page,
+sector, input, and whether the movement stick was held. WoW still decides
+whether the action succeeds.
 Use **`/ep debug off`** to stop logging or **`/ep debug`** to check its
 status. Logging resets on reload.
 
@@ -253,14 +262,13 @@ A pet without a matching prepared layout uses native pet-bar slots until
 combat ends.
 
 Press **A / Cross** or left-click to issue a command. Abilities that support
-autocast show a soft gold ring when enabled. Active pet commands and
-stances show a soft green ring. The **Attack** ring pulses while the pet is
+autocast show a gently pulsing amber ring when enabled. Active pet commands
+and stances pulse green. The **Attack** ring pulses faster while the pet is
 attacking. **Move To** displays **Choose a destination** while you pick
 a spot. Unavailable actions dim, and the selected entry reports when it
 is out of range, on cooldown, or currently unavailable.
 The controller prompt shows **X Activate** when autocast is off and
 **X Disable** when it is on. Right-click the ability to toggle autocast.
-The Pet selector lights up the segment, leaving the icon ring for status.
 The segment is violet by default, green for active commands and stances,
 gold for autocast on, and blue for autocast off.
 The combat wheel uses the pet's autocast abilities prepared before the
@@ -346,8 +354,18 @@ in the active profile, including its custom entries, Favorites, and Actions.
 Confirm outside combat. General opens after the reset. Other profiles and
 WoW keybinds are kept.
 
-Under **Customization**, **Display and feedback** groups the keybind legend,
-cooldown numbers, tooltips, and wheel sounds. When **Show keybind legend**
+**Tint wheel segments** is on by default. Find it under
+**Customization → Display and feedback** to control the tint on unselected
+segments and their icon rings. Adjust
+**Tint strength** beside the toggle by dragging it or by focusing it and
+pressing D-pad Left/Right. This applies to the main wheel, its sub-wheels,
+and the Pet Wheel. The slider defaults to **50%** (25% opacity) and tops
+out at **100%** (50% segment opacity). Ordinary idle rings start at bronze and
+blend up to 25% toward the highlight color at **100%**. Target marker and ping
+rings use their icon colors, and active pet status rings pulse in their own colors.
+Both settings save with your active profile.
+
+When **Show keybind legend**
 is off, press **View / Select** to fade the legend in, and press it again to
 fade it out. Turn off **Show legend hint** to hide the small prompt. The
 shortcut stays active and takes priority over quick removal while the
@@ -570,7 +588,8 @@ slash commands are blue. Click **Previous Page** or **Next Page**, or press
 Select **New** in Settings or type `/ep new` to read the in-game changelog.
 It opens at the latest release. Use the same page controls to browse older versions.
 Settings and Help open outside combat. If combat closes Settings, it reopens
-on the same tab when combat ends. Debugging is available during combat.
+on the same tab once combat ends and the wheel is closed. Debugging is
+available during combat.
 Reload the UI after installing.
 
 ## Source layout

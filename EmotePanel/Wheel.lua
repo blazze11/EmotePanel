@@ -23,8 +23,33 @@ local ICON_SLOT_SIZE = 46
 local SECTOR_ANGLE = 2 * math.pi / ns.SECTOR_COUNT
 local WHEEL_ATLAS = "gamepad-radial-menu-wheelbg"
 local SELECTION_ATLAS = "gamepad-radial-menu-selected"
-local ICON_BORDER = "gamepad-actionbar-circleslot-border-normal"
-local SELECTED_ICON_BORDER = "gamepad-actionbar-circleslot-border-selected"
+local SLOT_RING_TEXTURE = ("Interface\\AddOns\\%s\\Art\\WheelIconRing.tga"):format(AddonName)
+local SLOT_IDLE_RING = { 0.48, 0.39, 0.31, 0.78 }
+local SLOT_FOCUS_RING = { 0.72, 0.82, 0.9 }
+local DEFAULT_WEDGE_COLOR = { 1, 0.83, 0.33 }
+local SLOT_PRESS_DURATION = 0.16
+local DEFAULT_TINT_STRENGTH = 50
+local MAX_IDLE_WEDGE_ALPHA = 0.5
+local MAX_IDLE_RING_TINT = 0.25
+local MARKER_RING_ALPHA = 0.65
+local RAID_MARKER_COLORS = {
+    { 1, 0.91, 0.23 }, -- Star
+    { 1, 0.55, 0.13 }, -- Circle
+    { 0.79, 0.33, 0.95 }, -- Diamond
+    { 0.27, 0.9, 0.22 }, -- Triangle
+    { 0.66, 0.82, 0.9 }, -- Moon
+    { 0.19, 0.58, 1 }, -- Square
+    { 1, 0.27, 0.23 }, -- Cross
+    { 0.96, 0.95, 0.87 }, -- Skull
+}
+local PING_COLORS = {
+    { 1, 0.56, 0.15 }, -- Attack
+    { 1, 0.34, 0.23 }, -- Warning
+    { 0.25, 0.73, 1 }, -- On My Way
+    { 0.35, 0.88, 0.2 }, -- Assist
+    { 0.34, 0.47, 1 }, -- Look
+    { 0.92, 0.19, 0.3 }, -- Threat
+}
 local SELECTION_CHAT_TYPES = { emote = "TEXT_EMOTE", say = "SAY", party = "PARTY" }
 local SELECTION_COLORS = {
     emote = { 1, 0.5, 0.25 },
@@ -112,33 +137,69 @@ end
 
 local function GetSelectionType(mode, key, data)
     if Entries.IsPlayerInteraction(mode, key) then return "interactions" end
-    if Entries.GetRaidMarker(mode, key, data) then return "submenu" end
     if mode == "emotes" and Entries.voicedEmoteTokens[Entries.GetEmoteToken(data)] then
         return "voicedEmotes"
     end
     return SELECTION_COLORS[data.category] and data.category or data.actionType
 end
 
-local function ApplySelectedTint(self, mode, key, data, blocked)
+local function GetMarkerColor(mode, key, data)
+    if mode == "pings" then return PING_COLORS[data.actionID] end
+    local marker = Entries.GetRaidMarker(mode, key, data)
+    return RAID_MARKER_COLORS[marker], marker
+end
+
+local function GetSelectionColor(mode, key, data, blocked)
+    if blocked then return COMBAT_DISABLED_COLOR end
+    local markerColor, raidMarker = GetMarkerColor(mode, key, data)
+    if markerColor or raidMarker then return markerColor or SELECTION_COLORS.submenu end
     local selectionType = GetSelectionType(mode, key, data)
-    local color = blocked and COMBAT_DISABLED_COLOR or SELECTION_COLORS[selectionType]
+    local color = SELECTION_COLORS[selectionType]
     local chatType = SELECTION_CHAT_TYPES[selectionType]
-    local chatColor = not blocked and chatType and ChatTypeInfo and ChatTypeInfo[chatType]
+    local chatColor = chatType and ChatTypeInfo and ChatTypeInfo[chatType]
     if chatColor and chatColor.r and chatColor.g and chatColor.b then
         color = { chatColor.r, chatColor.g, chatColor.b }
     end
-    if not blocked and data.actionType == "pet" then
+    if data.actionType == "pet" then
         if data.canAutocast and data.autocast ~= nil then
             color = data.autocast and PET_AUTOCAST_SELECTION_ON or PET_AUTOCAST_SELECTION_OFF
         elseif data.active then
             color = PET_ACTIVE_GLOW
         end
     end
+    return color
+end
+
+local function ApplySelectedTint(self, data, color)
     SetSelectionTint(self.highlight, color)
-    if data.actionType ~= "pet" then SetSelectionTint(self.slots[self.selected].border, color) end
+    if data.actionType ~= "pet" then self.slots[self.selected].border:SetVertexColor(unpack(color or SLOT_FOCUS_RING)) end
+end
+
+local function ApplyIdleRingTint(slot, tintStrength)
+    local marker = slot.markerColor
+    local tint = slot.idleRingTint
+    if marker then
+        slot.border:SetVertexColor(marker[1], marker[2], marker[3], MARKER_RING_ALPHA)
+    elseif tint then
+        local r, g, b, alpha = unpack(SLOT_IDLE_RING)
+        local blend = tintStrength * MAX_IDLE_RING_TINT
+        slot.border:SetVertexColor(r + (tint[1] - r) * blend,
+            g + (tint[2] - g) * blend, b + (tint[3] - b) * blend, alpha)
+    else
+        slot.border:SetVertexColor(unpack(SLOT_IDLE_RING))
+    end
+end
+
+local function GetTintStrength()
+    local strength = EmotePanelSavedVars.wheelTintStrength
+    if type(strength) ~= "number" or strength ~= strength then return DEFAULT_TINT_STRENGTH end
+    return math.floor(math.max(0, math.min(100, strength)) + 0.5)
 end
 
 function EmotePanel:RefreshCombatAppearance()
+    local tintStrength = EmotePanelSavedVars.tintWheelSegments ~= false and GetTintStrength() / 100 or 0
+    self.idleTintStrength = tintStrength
+    local tintAlpha = tintStrength * MAX_IDLE_WEDGE_ALPHA
     for index, slot in ipairs(self.slots) do
         local mode, key, data = Pages.GetSectorEntry(index)
         local blocked = data ~= nil and IsWheelEntryBlocked(mode, key, data) or false
@@ -147,7 +208,21 @@ function EmotePanel:RefreshCombatAppearance()
             slot:SetAlpha(blocked and 0.55 or 1)
             slot.icon:SetDesaturated(blocked or slot.actionOnCooldown == true)
         end
-        if data and index == self.selected then ApplySelectedTint(self, mode, key, data, blocked) end
+        local selected = data ~= nil and index == self.selected
+        local showTint = tintAlpha > 0 and data ~= nil and slot:IsShown()
+        local tint
+        if selected or showTint then
+            local color = GetSelectionColor(mode, key, data, blocked)
+            if selected then ApplySelectedTint(self, data, color) end
+            if showTint then
+                tint = color or DEFAULT_WEDGE_COLOR
+                slot.idleWedge:SetVertexColor(tint[1], tint[2], tint[3], tintAlpha)
+            end
+        end
+        slot.hasIdleTint = showTint
+        slot.idleWedge:SetShown(showTint and not selected)
+        slot.idleRingTint = not slot.petStatus:IsShown() and tint or nil
+        if data and (not selected or data.actionType == "pet") then ApplyIdleRingTint(slot, tintStrength) end
     end
 end
 
@@ -238,11 +313,11 @@ function EmotePanel:RefreshSelectedActionFeedback()
     end
 end
 
-local function PositionHighlight(self, angle)
+local function PositionWedge(self, texture, angle)
     local radius = self.highlightRadius
-    self.highlight:SetPoint("CENTER", self.wheel, "CENTER", math.sin(angle) * radius, math.cos(angle) * radius)
+    texture:SetPoint("CENTER", self.wheel, "CENTER", math.sin(angle) * radius, math.cos(angle) * radius)
     -- Blizzard's highlight atlas points down before rotation.
-    self.highlight:SetRotation(math.pi - angle)
+    texture:SetRotation(math.pi - angle)
 end
 
 local vibrationActive
@@ -257,6 +332,32 @@ local function PulseWheelVibration()
     end)
 end
 
+local function DrawWheelPress(self, index)
+    if self.wheelPressSector then
+        local slot = self.slots[self.wheelPressSector]
+        slot.pressPulse:Stop()
+        slot.pressedBorder:Hide()
+        slot.border:Show()
+    end
+    self.wheelPressSector = nil
+    local mode, key, data = Pages.GetSectorEntry(index)
+    if data and self.frame:IsShown() and self:CanUseWheel() and not IsWheelEntryBlocked(mode, key, data) then
+        local slot = self.slots[index]
+        self.wheelPressSector = index
+        slot.border:Hide()
+        local color = GetSelectionColor(mode, key, data, false) or DEFAULT_WEDGE_COLOR
+        slot.pressedBorder:SetVertexColor(color[1], color[2], color[3])
+        slot.pressedBorder:Show()
+        slot.pressPulse:Play()
+    end
+end
+
+function EmotePanel:SetWheelPressed(index, input)
+    if not index and input and input ~= self.wheelPressInput then return end
+    self.wheelPressInput = index and input or nil
+    DrawWheelPress(self, index)
+end
+
 function EmotePanel:Select(index, showTooltip, sound, fromController)
     if index then
         if Pages.currentPage.count == 0 then return end
@@ -268,11 +369,14 @@ function EmotePanel:Select(index, showTooltip, sound, fromController)
     end
 
     if self.selected then
-        local previousBorder = self.slots[self.selected].border
-        previousBorder:SetAtlas(ICON_BORDER)
-        SetSelectionTint(previousBorder)
+        local previous = self.slots[self.selected]
+        previous.idleWedge:SetShown(previous.hasIdleTint)
+        ApplyIdleRingTint(previous, self.idleTintStrength)
     end
     self.selected = index
+    if not self.combatView and (self.wheelPressInput == "PAD1" or self.wheelPressInput == "WheelActivate") then
+        DrawWheelPress(self, index)
+    end
     local mode, slot, data = Pages.GetSectorEntry(index)
     if not data then
         self.highlight:Hide()
@@ -293,12 +397,12 @@ function EmotePanel:Select(index, showTooltip, sound, fromController)
         self:RefreshGamepadHint()
         return
     end
+    self.slots[index].idleWedge:Hide()
     self.highlight:Show()
-    if mode ~= "pet" then self.slots[index].border:SetAtlas(SELECTED_ICON_BORDER) end
-    PositionHighlight(self, (index - 1) * SECTOR_ANGLE)
+    PositionWedge(self, self.highlight, (index - 1) * SECTOR_ANGLE)
     PlayWheelSound(sound)
     if fromController then PulseWheelVibration() end
-    ApplySelectedTint(self, mode, slot, data, IsWheelEntryBlocked(mode, slot, data))
+    ApplySelectedTint(self, data, GetSelectionColor(mode, slot, data, IsWheelEntryBlocked(mode, slot, data)))
     self.selectionName:SetText(Entries.GetInviteLabel(mode, slot, data) or Entries.GetEntryName(mode, slot, data))
     RefreshTextShadow(self.selectionName)
     SetWheelEntryPreview(self, mode, slot, data)
@@ -320,6 +424,33 @@ local function CreateIconSlot(parent)
     return slot
 end
 
+local function CreateSlotRing(slot, sublevel)
+    local ring = slot:CreateTexture(nil, "OVERLAY", nil, sublevel)
+    ring:SetTexture(SLOT_RING_TEXTURE)
+    ring:SetSize(64, 64)
+    ring:SetPoint("CENTER")
+    return ring
+end
+
+local function CreatePressPulse(ring)
+    local pulse = ring:CreateAnimationGroup()
+    pulse:SetToFinalAlpha(true)
+    local alpha = pulse:CreateAnimation("Alpha")
+    alpha:SetFromAlpha(1)
+    alpha:SetToAlpha(0.76)
+    alpha:SetOrder(1)
+    alpha:SetDuration(SLOT_PRESS_DURATION)
+    alpha:SetSmoothing("OUT")
+    local scale = pulse:CreateAnimation("Scale")
+    scale:SetOrder(1)
+    scale:SetOrigin("CENTER", 0, 0)
+    scale:SetScaleFrom(0.91, 0.91)
+    scale:SetScaleTo(1, 1)
+    scale:SetDuration(SLOT_PRESS_DURATION)
+    scale:SetSmoothing("OUT")
+    return pulse
+end
+
 function EmotePanel:CreateWheel()
     local wheel = CreateFrame("Button", nil, self.frame)
     wheel:SetSize(WHEEL_SIZE, WHEEL_SIZE)
@@ -336,15 +467,16 @@ function EmotePanel:CreateWheel()
     local clearMark = CreateIconSlot(display)
     clearMark:SetPoint("CENTER")
     Widgets.SetIconTexture(clearMark.icon, Entries.CLEAR_MARK_ICON, true)
-    clearMark.border = Widgets.AddAtlas(clearMark, ICON_BORDER, "OVERLAY")
-    clearMark.border:SetAllPoints()
+    clearMark.border = CreateSlotRing(clearMark, 0)
+    clearMark.border:SetVertexColor(unpack(SLOT_IDLE_RING))
     clearMark:Hide()
     self.clearMarkIcon = clearMark
 
     local wheelInfo = C_Texture.GetAtlasInfo(WHEEL_ATLAS) or { width = 525 }
     local highlightInfo = C_Texture.GetAtlasInfo(SELECTION_ATLAS) or { width = 177, height = 168 }
     local scale = WHEEL_SIZE / wheelInfo.width
-    self.highlight:SetSize(highlightInfo.width * scale, highlightInfo.height * scale)
+    local wedgeWidth, wedgeHeight = highlightInfo.width * scale, highlightInfo.height * scale
+    self.highlight:SetSize(wedgeWidth, wedgeHeight)
     self.highlightRadius = 150 * scale
 
     local slots = CreateFrame("Frame", nil, display)
@@ -357,6 +489,11 @@ function EmotePanel:CreateWheel()
         local angle = (index - 1) * SECTOR_ANGLE
         local radius = self.highlightRadius
         slot:SetPoint("CENTER", wheel, "CENTER", math.sin(angle) * radius, math.cos(angle) * radius)
+        slot.idleWedge = Widgets.AddAtlas(display, SELECTION_ATLAS, "BORDER")
+        slot.idleWedge:SetSize(wedgeWidth, wedgeHeight)
+        slot.idleWedge:SetDesaturated(true)
+        PositionWedge(self, slot.idleWedge, angle)
+        slot.idleWedge:Hide()
 
         local icon = slot.icon
 
@@ -404,18 +541,14 @@ function EmotePanel:CreateWheel()
         slot.countText = countOverlay:CreateFontString(nil, "OVERLAY", "NumberFontNormalSmall")
         slot.countText:SetPoint("BOTTOMRIGHT", -1, 0)
 
-        local petStatus = Widgets.AddAtlas(slot, SELECTED_ICON_BORDER, "OVERLAY")
-        petStatus:SetSize(slot:GetWidth() + 4, slot:GetHeight() + 4)
-        petStatus:SetPoint("CENTER")
-        petStatus:SetDesaturated(true)
-        petStatus:Hide()
-        slot.petStatus = petStatus
+        slot.border = CreateSlotRing(slot, 0)
+        slot.border:SetVertexColor(unpack(SLOT_IDLE_RING))
 
-        slot.border = Widgets.AddAtlas(slot, ICON_BORDER, "OVERLAY")
-        slot.border:SetAllPoints()
-        slot.pressedBorder = Widgets.AddAtlas(slot, "gamepad-actionbar-circleslot-border-pressed", "OVERLAY")
-        slot.pressedBorder:SetAllPoints()
+        slot.petStatus = CreateSlotRing(slot, 1)
+        slot.petStatus:Hide()
+        slot.pressedBorder = CreateSlotRing(slot, 2)
         slot.pressedBorder:Hide()
+        slot.pressPulse = CreatePressPulse(slot.pressedBorder)
 
         slot.favorite = Widgets.AddAtlas(slot, "collections-icon-favorites", "OVERLAY")
         slot.favorite:SetSize(16, 16)
@@ -433,7 +566,7 @@ local function AnchorWheelTooltip(self)
 end
 
 function EmotePanel:SetClearMarkHovered(hovered)
-    self.clearMarkIcon.border:SetAtlas(hovered and SELECTED_ICON_BORDER or ICON_BORDER)
+    self.clearMarkIcon.border:SetVertexColor(unpack(hovered and SLOT_FOCUS_RING or SLOT_IDLE_RING))
     if not hovered or EmotePanelSavedVars.showWheelTooltips ~= true then return end
     local tooltip = self.wheelTooltip
     if self.wheelTooltipFromMouse and not self.wheelTooltipSector and tooltip:IsShown() then return end
@@ -508,25 +641,6 @@ function EmotePanel:ShowWheelEntryTooltip(sector, fromMouse)
         end
     end
     tooltip:Show()
-end
-
-function EmotePanel:SetWheelPressed(index, input)
-    if not index and input and input ~= self.wheelPressInput then return end
-    if self.wheelPressSector then
-        local slot = self.slots[self.wheelPressSector]
-        slot.pressedBorder:Hide()
-        slot.border:Show()
-        slot.icon:SetPoint("CENTER")
-    end
-    self.wheelPressSector, self.wheelPressInput = nil, nil
-    local mode, key, data = Pages.GetSectorEntry(index)
-    if data and self.frame:IsShown() and self:CanUseWheel() and not IsWheelEntryBlocked(mode, key, data) then
-        local slot = self.slots[index]
-        self.wheelPressSector, self.wheelPressInput = index, input
-        slot.border:Hide()
-        slot.pressedBorder:Show()
-        slot.icon:SetPoint("CENTER", 0, -2)
-    end
 end
 
 local function GetActionItemOrSpell(data)
@@ -807,22 +921,28 @@ function EmotePanel:RefreshActionAvailability()
     self:RefreshSelectedActionFeedback()
 end
 
-local function SetPetAttackPulse(texture, attacking)
-    local pulse = texture.attackPulse
-    if attacking then
-        if not pulse then
-            pulse = texture:CreateAnimationGroup()
-            pulse:SetLooping("BOUNCE")
-            local alpha = pulse:CreateAnimation("Alpha")
-            alpha:SetFromAlpha(0.45)
-            alpha:SetToAlpha(0.9)
-            alpha:SetDuration(0.6)
-            texture.attackPulse = pulse
-        end
-        if not pulse:IsPlaying() then pulse:Play() end
-    elseif pulse then
-        pulse:Stop()
+local function SetPetStatusPulse(texture, shown, attacking)
+    local pulse = texture.statusPulse
+    if not shown then
+        if pulse then pulse:Stop() end
+        return
     end
+    if not pulse then
+        pulse = texture:CreateAnimationGroup()
+        pulse:SetLooping("BOUNCE")
+        texture.statusPulse = pulse
+        texture.statusAlpha = pulse:CreateAnimation("Alpha")
+        texture.statusAlpha:SetSmoothing("IN_OUT")
+    end
+    if texture.pulseAttacking ~= attacking then
+        pulse:Stop()
+        local alpha = texture.statusAlpha
+        alpha:SetFromAlpha(attacking and 0.46 or 0.68)
+        alpha:SetToAlpha(0.94)
+        alpha:SetDuration(attacking and 0.48 or 1.15)
+        texture.pulseAttacking = attacking
+    end
+    if not pulse:IsPlaying() then pulse:Play() end
 end
 
 function EmotePanel:RefreshSpellIcons()
@@ -852,10 +972,9 @@ function EmotePanel:RefreshWheel(selection)
     for index, slot in ipairs(self.slots) do
         local mode, entryIndex, data = Pages.GetSectorEntry(index)
         local used = data ~= nil
+        slot.markerColor = data and GetMarkerColor(mode, entryIndex, data)
         if data then
             Widgets.SetIconTexture(slot.icon, Entries.GetEntryIcon(mode, entryIndex, data), true)
-            slot.border:SetAtlas(ICON_BORDER)
-            SetSelectionTint(slot.border)
             slot.favorite:SetShown(Pages.currentPage.mode ~= "favorites" and Entries.FindFavorite(mode, entryIndex) ~= nil)
             used = not IsCombatItemMissing(data)
         end
@@ -865,7 +984,7 @@ function EmotePanel:RefreshWheel(selection)
         end
         if statusColor then slot.petStatus:SetVertexColor(unpack(statusColor)) end
         slot.petStatus:SetShown(not not statusColor)
-        SetPetAttackPulse(slot.petStatus, data and mode == "pet" and data.attacking and self.frame:IsShown())
+        SetPetStatusPulse(slot.petStatus, statusColor and self.frame:IsShown(), data and data.attacking == true)
         slot:SetShown(used)
     end
     local nextSelection = selection or self.selected
@@ -1327,7 +1446,7 @@ function EmotePanel:InitializeWheel()
         self.wheelTooltip:Hide()
         self:SetWheelMovementCapture(false)
         self:SetWheelPressed(nil)
-        for _, slot in ipairs(self.slots) do SetPetAttackPulse(slot.petStatus, false) end
+        for _, slot in ipairs(self.slots) do SetPetStatusPulse(slot.petStatus, false) end
         self:RefreshSpellFeedback()
         self:UpdateSecureWheelInput()
         if not self.combatView and self.gamepadInput then self.gamepadInput:Show() end
@@ -1335,6 +1454,7 @@ function EmotePanel:InitializeWheel()
         StaticPopup_Hide("EMOTEPANEL_RESET_BUTTON")
         StaticPopup_Hide("EMOTEPANEL_RESET_ALL")
         StaticPopup_Hide("EMOTEPANEL_RESET_SETTINGS")
+        ns.SettingsUI.RestoreAfterCombat(true)
     end)
 
     -- Hide by default
@@ -1365,6 +1485,8 @@ end
 Wheel.CAST_EVENTS = CAST_EVENTS
 Wheel.GetPositionLimits = GetPositionLimits
 Wheel.RoundOffset = RoundOffset
+Wheel.GetTintStrength = GetTintStrength
+Wheel.DEFAULT_TINT_STRENGTH = DEFAULT_TINT_STRENGTH
 Wheel.SECTOR_ANGLE = SECTOR_ANGLE
 Wheel.WHEEL_SIZE = WHEEL_SIZE
 Wheel.TOP_OFFSET = WHEEL_TOP_OFFSET
